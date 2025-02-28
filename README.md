@@ -1,10 +1,9 @@
 Alexis Linux: The AI-Native Open-Source Distro
 Tagline: "Intelligence Built In, Freedom Built Out." 
 
-Enable "trinary" features in a binary world with AI-driven innovation.
-
 Philosophy:
-Alexis Linux is designed as a forward-thinking, AI-driven operating system where open-source artificial intelligence isn’t just a tool—it’s the foundation. Inspired by the ethos of transparency and community empowerment, Alexis integrates AI into every layer, from system management to user experience, while keeping everything auditable, customizable, and free (as in freedom). Think of it as a distro where AI doesn’t replace the user’s control but amplifies it.
+Alexis Linux is designed as a forward-thinking, AI-driven operating system where open-source artificial intelligence isn’t just a tool—it’s the foundation. Inspired by the ethos of transparency and community empowerment, Alexis integrates AI into every layer, from system management to user experience, while keeping everything auditable, customizable, and free (as in freedom). Think of it as a distro where AI doesn’t replace the user’s control but amplifies it. Enable "trinary" features in a binary world with AI-driven innovation.
+
 
 Base:
 Rather than forking an existing distro like Debian or Arch, Alexis Linux is built from scratch using the Linux kernel (let’s say 6.8 for modernity) and a minimalist, modular base akin to a lightweight Linux From Scratch setup. This allows the AI components to be woven in without legacy baggage.
