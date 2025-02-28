@@ -1,5 +1,5 @@
 Alexis Linux: The AI-Native Open-Source Distro
-Tagline: "Intelligence Built In, Freedom Built Out." + 
+Tagline: "Intelligence Built In, Freedom Built Out." 
 Enable "trinary" features in a binary world with AI-driven innovation.
 
 Philosophy:
