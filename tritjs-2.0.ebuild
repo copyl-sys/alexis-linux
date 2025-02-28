@@ -6,7 +6,7 @@ EAPI=8
 # Description: Tailored for AI experimentation with ternary logic
 DESCRIPTION="TritJS: A ternary logic arithmetic library for AI applications, implemented in CWEB"
 HOMEPAGE="https://example.com/tritjs" # Placeholder; replace with actual URL if available
-SRC_URI="https://example.com/tritjs-${PV}.cweb" # Placeholder; adjust to real source location
+SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS.cweb" # Placeholder; adjust to real source location
 
 # Licensing: GPL-2 for open-source AI collaboration; consider MIT for broader AI adoption
 LICENSE="GPL-2"
