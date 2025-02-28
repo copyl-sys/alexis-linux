@@ -5,7 +5,7 @@ EAPI=8
 
 DESCRIPTION="Axion: Ternary Package Manager (CISA Inspired Guardian AI)"
 HOMEPAGE="https://alexislinux.org/axion"
-SRC_URI="https://https://github.com/copyl-sys/alexis-linux/TritJS.cweb${P}.cweb"
+SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS.cweb${P}.cweb"
 
 LICENSE="GPL-3"
 SLOT="0"
