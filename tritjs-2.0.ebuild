@@ -3,9 +3,9 @@
 
 EAPI=8
 
-DESCRIPTION="TritJS: Ternary logic library for Alexis Linux AI ecosystem and CISA Guardian AI, with optional Axion AI package manager"
+DESCRIPTION="TritJS: Ternary logic library for Alexis Linux AI ecosystem and CISA Guardian AI, with optional Axion AI enhancement"
 HOMEPAGE="https://alexislinux.org/tritjs"
-SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS-${PV}.cweb" # Decentralized Git source
+SRC_URI="https://alexislinux.org/src/tritjs-${PV}.cweb"
 
 LICENSE="GPL-3"
 SLOT="0"
@@ -56,8 +56,8 @@ AI Core: Online | Learning Mode: Active
 
 Overview:
   TritJS provides ternary (base-3) arithmetic for Alexis Linux’s AI ecosystem and
-  CISA’s Guardian AI. With -DAXION, it enhances AI with Axion, an AI-driven package
-  manager integrated with Portage.
+  CISA’s Guardian AI. With -DAXION, it enhances AI with Axion, relying on .cweb
+  documentation for configuration.
 
 USE Flags:
   - ai: Enables core AI features (required).
@@ -77,7 +77,7 @@ Usage:
   - Axion (if enabled): `axion install <package>`.
 
 Documentation:
-  - Source: /usr/share/doc/tritjs-1.0/tritjs.cweb
+  - Source: /usr/share/doc/tritjs-1.0/tritjs.cweb (required by AI)
   - Typeset (if 'doc'): /usr/share/doc/tritjs-1.0/tritjs.dvi
   - Guide: /usr/share/doc/tritjs-1.0/ai_alexis_cisa.txt
 
@@ -93,20 +93,21 @@ EOF
 TritJS 1.0 in Alexis Linux v1.0.0 with CISA Guardian AI:
 
 1. Core AI Functionality (USE="ai"):
-  - Ternary Logic: tritjs_add(), tritjs_multiply(), tritjs_subtract() for AI operations.
+  - Ternary Logic: tritjs_add(), tritjs_multiply(), tritjs_subtract().
   - Guardian AI: Network traffic analysis, anomaly detection, threat mitigation.
+  - Dependence: Relies on tritjs.cweb for algorithm parameters.
 
 2. Axion Enhancement (-DAXION):
-  - Tools: Ollama (LLM), Systemd (logs), TritJS
+  - Tools: Ollama, Systemd, TritJS
   - Functionality:
-    - Analyzes systemd logs for usage frequency (e.g., Python calls).
-    - tritjs_multiply() weights dependencies (0=optional, 1=recommended, 2=required).
+    - Parses systemd logs for usage frequency.
+    - tritjs_multiply() weights dependencies from .cweb directives.
     - Suggests packages based on ternary scores.
   - Portage Integration:
-    - Wrapper: /usr/bin/axion calls `emerge`.
-    - Helper: /usr/libexec/axion_weight for ternary calculations.
-    - Config: /etc/axion/axion.conf.
-  - Transparency: Training data at ${HOMEPAGE}/axion-data.
+    - Wrapper: /usr/bin/axion.
+    - Helper: /usr/libexec/axion_weight.
+    - Config: /etc/axion/ai_config.conf (from .cweb).
+  - Dependence: Requires tritjs.cweb for thresholds and mappings.
 
 3. Guardian AI - Network Traffic Analysis (NIST SP 800-61, SP 800-115):
   - Tools: Security Onion, libpcap
@@ -129,12 +130,18 @@ EOF
             die "Failed to create ai_alexis_cisa.txt"
         fi
 
-        # Axion wrapper script with usage frequency algorithm
+        # Axion wrapper script with .cweb dependency
         einfo "Creating Axion wrapper..."
         if ! cat > "${S}/axion" << 'EOF'
 #!/bin/bash
 # Axion: AI-driven package manager enhancement for Portage
 set -e
+
+CONFIG="/etc/axion/ai_config.conf"
+if [ ! -f "$CONFIG" ]; then
+    echo "Axion: Error: Missing .cweb-derived configuration at $CONFIG."
+    exit 1
+fi
 
 echo "Axion: Analyzing usage patterns..."
 LOG_FILE="/var/log/systemd/system.log"
@@ -142,18 +149,22 @@ if [ ! -f "$LOG_FILE" ]; then
     echo "Axion: Warning: Systemd log $LOG_FILE unavailable. Using default score."
     USAGE_SCORE=1
 else
-    # Algorithm: Count occurrences of common commands in logs
+    # Algorithm: Count command occurrences from logs
     PYTHON_COUNT=$(grep -c "python3" "$LOG_FILE" 2>/dev/null || echo 0)
     NET_COUNT=$(grep -c "ping\|curl\|wget" "$LOG_FILE" 2>/dev/null || echo 0)
-    # Normalize to ternary (0=low, 1=med, 2=high)
-    if [ "$PYTHON_COUNT" -gt 10 ]; then
+    THRESHOLD=$(grep "USAGE_THRESHOLD" "$CONFIG" | cut -d'=' -f2)
+    if [ -z "$THRESHOLD" ]; then
+        echo "Axion: Error: USAGE_THRESHOLD not found in $CONFIG."
+        exit 1
+    fi
+    if [ "$PYTHON_COUNT" -gt "$THRESHOLD" ]; then
         USAGE_SCORE=2
-    elif [ "$PYTHON_COUNT" -gt 5 ]; then
+    elif [ "$PYTHON_COUNT" -gt "$(($THRESHOLD / 2))" ]; then
         USAGE_SCORE=1
     else
         USAGE_SCORE=0
     fi
-    echo "Axion: Usage frequency - Python: $PYTHON_COUNT, Network: $NET_COUNT (score: $USAGE_SCORE)"
+    echo "Axion: Usage - Python: $PYTHON_COUNT, Network: $NET_COUNT (score: $USAGE_SCORE)"
 fi
 
 PACKAGE="$1"
@@ -163,12 +174,16 @@ if [ -z "$PACKAGE" ]; then
 fi
 
 echo "Axion: Calculating dependency weights for ${PACKAGE}..."
-# Use axion_weight helper for ternary multiplication
 if [ ! -x /usr/libexec/axion_weight ]; then
     echo "Axion: Error: axion_weight helper not found or not executable."
     exit 1
 fi
-WEIGHT=$(echo "$USAGE_SCORE 1" | /usr/libexec/axion_weight) # Usage × Utility (1=moderate)
+UTILITY_SCORE=$(grep "UTILITY_DEFAULT" "$CONFIG" | cut -d'=' -f2)
+if [ -z "$UTILITY_SCORE" ]; then
+    echo "Axion: Error: UTILITY_DEFAULT not found in $CONFIG."
+    exit 1
+fi
+WEIGHT=$(echo "$USAGE_SCORE $UTILITY_SCORE" | /usr/libexec/axion_weight)
 if [ $? -ne 0 ]; then
     echo "Axion: Error: Ternary weighting failed."
     exit 1
@@ -176,18 +191,21 @@ fi
 
 SUGGESTIONS=""
 case $WEIGHT in
-    2) SUGGESTIONS="sci-libs/tensorflow-alexis net-analyzer/security-onion" ;;
-    1) SUGGESTIONS="app-misc/ollama" ;;
+    2) SUGGESTIONS=$(grep "SUGGESTIONS_HIGH" "$CONFIG" | cut -d'=' -f2) ;;
+    1) SUGGESTIONS=$(grep "SUGGESTIONS_MED" "$CONFIG" | cut -d'=' -f2) ;;
     *) SUGGESTIONS="" ;;
 esac
-echo "Axion: Suggested packages: $SUGGESTIONS (ternary weight: $WEIGHT)"
+if [ -z "$SUGGESTIONS" ] && [ "$WEIGHT" -gt 0 ]; then
+    echo "Axion: Warning: No suggestions defined in $CONFIG for weight $WEIGHT."
+fi
+echo "Axion: Suggested packages: $SUGGESTIONS (weight: $WEIGHT)"
 
 echo "Axion: Installing via Portage..."
 if ! emerge -av "$PACKAGE" $SUGGESTIONS; then
     echo "Axion: Error: Portage installation failed."
     exit 1
 fi
-echo "Axion: Installation complete. Run 'axion update' to refine predictions."
+echo "Axion: Installation complete."
 EOF
         then
             die "Failed to create axion wrapper script"
@@ -196,7 +214,7 @@ EOF
             die "Failed to make axion executable"
         fi
 
-        # Axion weight calculation helper (compiled C program)
+        # Axion weight calculation helper
         einfo "Creating Axion weight helper..."
         if ! cat > "${S}/axion_weight.c" << 'EOF'
 #include <stdio.h>
@@ -227,18 +245,21 @@ EOF
             die "Failed to create axion_weight.c"
         fi
 
-        # Axion configuration file
-        einfo "Creating Axion config..."
-        if ! cat > "${S}/axion.conf" << 'EOF'
-# Axion configuration for Portage integration
-USE_TRITJS=1
-LLM_MODEL="ollama"
-LOG_DIR="/var/log/systemd"
-TRAINING_DATA="https://alexislinux.org/axion-data"
-SUGGESTION_THRESHOLD=1
+        # Generate AI config from .cweb
+        einfo "Generating AI configuration from .cweb..."
+        if ! grep "@ai" "${S}/tritjs.cweb" > "${S}/ai_config.conf"; then
+            # Fallback to default config if no @ai directives found
+            if ! cat > "${S}/ai_config.conf" << 'EOF'
+# AI configuration derived from tritjs.cweb
+USAGE_THRESHOLD=10
+UTILITY_DEFAULT=1
+SUGGESTIONS_HIGH="sci-libs/tensorflow-alexis net-analyzer/security-onion"
+SUGGESTIONS_MED="app-misc/ollama"
 EOF
-        then
-            die "Failed to create axion.conf"
+            then
+                die "Failed to create fallback ai_config.conf"
+            fi
+            ewarn "No @ai directives found in tritjs.cweb; using default configuration."
         fi
     fi
 }
@@ -286,7 +307,6 @@ EOF
             die "Failed to create tritjs.h"
         fi
 
-        # Compile Axion weight helper if -DAXION is enabled
         if [ -n "$axion_flag" ]; then
             einfo "Compiling Axion weight helper..."
             if ! ecc -o axion_weight axion_weight.c; then
@@ -324,8 +344,8 @@ src_install() {
                 die "Failed to install axion_weight helper"
             fi
             insinto /etc/axion
-            if ! doins "${S}/axion.conf"; then
-                die "Failed to install axion.conf"
+            if ! doins "${S}/ai_config.conf"; then
+                die "Failed to install ai_config.conf"
             fi
         fi
     else
@@ -356,6 +376,7 @@ pkg_postinst() {
         elog "TritJS 1.0 installed successfully for Alexis Linux v1.0.0."
         if grep -q "AXION" <<< "${CFLAGS}"; then
             elog "Axion AI enhancement enabled. Use 'axion install <package>' for Portage integration."
+            elog "Axion depends on /usr/share/doc/${PF}/tritjs.cweb for configuration."
         else
             elog "Core AI functionality installed. Add 'CFLAGS=\"-DAXION\"' to enable Axion."
         fi
