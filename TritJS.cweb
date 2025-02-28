@@ -1,0 +1,219 @@
+@* TritJS: A Ternary Logic Library in C.
+This document describes \.{TritJS}, a library for ternary (base-3) arithmetic operations,
+originally designed as a JavaScript module for the ``Lilly Shea Distro.'' Here, we adapt it
+to C, providing functions for addition, subtraction, multiplication, and division of trit
+arrays. Each trit is an integer in $\{0, 1, 2\}$, and we aim to emulate ternary computation
+on binary hardware.
+
+The library is self-contained, with helper functions for trit-to-binary conversion and
+core arithmetic operations. We include minimal error handling and assume valid inputs for simplicity.
+
+@c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+@*1 Data Structures and Constants.
+We define a trit as an integer (0, 1, or 2) and use arrays to represent ternary numbers.
+For convenience, we also define a structure for division results.
+
+@d TRIT_MAX 3 /* Base-3 modulus */
+ typedef int Trit; /* A single trit: 0, 1, or 2 */
+ typedef struct {
+    Trit* quotient; /* Array of trits */
+    Trit* remainder; /* Array of trits */
+    int q_len; /* Length of quotient */
+    int r_len; /* Length of remainder */
+} TritDivResult;
+
+@*1 Helper Functions.
+These utilities handle conversions and single-trit arithmetic.
+
+@<Conversion Functions@>
+@<Arithmetic Helpers@>
+
+@ Conversions between trits and binary are crucial for division and debugging.
+@c
+@<Conversion Functions@>=
+unsigned long trits_to_binary(Trit* trits, int len) {
+    unsigned long bin = 0;
+    for (int i = 0; i < len; i++) {
+        bin = (bin << 2) | trits[i]; /* Each trit takes 2 bits */
+    }
+    return bin;
+}
+
+Trit* binary_to_trits(unsigned long bin, int len) {
+    Trit* trits = (Trit*)malloc(len * sizeof(Trit));
+    for (int i = len - 1; i >= 0; i--) {
+        trits[i] = bin & 0x3; /* Extract lowest 2 bits */
+        bin >>= 2;
+    }
+    return trits;
+}
+
+@ Single-trit arithmetic operations manage carries and borrows.
+@c
+@<Arithmetic Helpers@>=
+typedef struct { Trit value; int carry; } TritSum;
+TritSum trit_add(Trit a, Trit b) {
+    int sum = a + b;
+    return (TritSum){ sum % TRIT_MAX, sum / TRIT_MAX };
+}
+
+typedef struct { Trit value; int borrow; } TritDiff;
+TritDiff trit_subtract(Trit a, Trit b) {
+    int diff = a - b;
+    if (diff >= 0) return (TritDiff){ diff, 0 };
+    return (TritDiff){ (diff + TRIT_MAX) % TRIT_MAX, 1 };
+}
+
+typedef struct { Trit value; int carry; } TritProd;
+TritProd trit_multiply(Trit a, Trit b) {
+    int prod = a * b;
+    return (TritProd){ prod % TRIT_MAX, prod / TRIT_MAX };
+}
+
+@*1 Core Arithmetic Operations.
+Now we implement the main functions: addition, subtraction, multiplication, and division.
+
+@c
+Trit* tritjs_add(Trit* a, int a_len, Trit* b, int b_len, int* result_len) {
+    int max_len = (a_len > b_len) ? a_len : b_len;
+    Trit* result = (Trit*)malloc((max_len + 1) * sizeof(Trit)); /* Room for carry */
+    int carry = 0, pos = 0;
+
+    for (int i = max_len - 1; i >= 0; i--) {
+        Trit a_trit = (i < a_len) ? a[i] : 0;
+        Trit b_trit = (i < b_len) ? b[i] : 0;
+        TritSum sum = trit_add(a_trit + carry, b_trit);
+        result[max_len - pos] = sum.value;
+        carry = sum.carry;
+        pos++;
+    }
+    if (carry) {
+        result[0] = carry;
+        *result_len = max_len + 1;
+    } else {
+        memmove(result, result + 1, max_len * sizeof(Trit));
+        *result_len = max_len;
+    }
+    return result;
+}
+
+Trit* tritjs_subtract(Trit* a, int a_len, Trit* b, int b_len, int* result_len) {
+    int max_len = (a_len > b_len) ? a_len : b_len;
+    Trit* result = (Trit*)malloc(max_len * sizeof(Trit));
+    int borrow = 0;
+
+    for (int i = max_len - 1; i >= 0; i--) {
+        Trit a_trit = (i < a_len) ? a[i] : 0;
+        Trit b_trit = (i < b_len) ? b[i] : 0;
+        TritDiff diff = trit_subtract(a_trit - borrow, b_trit);
+        result[i] = diff.value;
+        borrow = diff.borrow;
+    }
+    /* Trim leading zeros */
+    int start = 0;
+    while (start < max_len - 1 && result[start] == 0) start++;
+    *result_len = max_len - start;
+    Trit* trimmed = (Trit*)malloc(*result_len * sizeof(Trit));
+    memcpy(trimmed, result + start, *result_len * sizeof(Trit));
+    free(result);
+    return trimmed;
+}
+
+Trit* tritjs_multiply(Trit* a, int a_len, Trit* b, int b_len, int* result_len) {
+    int max_len = a_len + b_len;
+    Trit* result = (Trit*)calloc(max_len, sizeof(Trit));
+    for (int i = a_len - 1; i >= 0; i--) {
+        int carry = 0;
+        for (int j = b_len - 1; j >= 0; j--) {
+            int pos = i + j + 1;
+            TritProd prod = trit_multiply(a[i], b[j]);
+            TritSum sum = trit_add(result[pos] + carry, prod.value);
+            result[pos] = sum.value;
+            carry = sum.carry + prod.carry;
+        }
+        if (carry) {
+            int carry_pos = i;
+            TritSum sum = trit_add(result[carry_pos] + carry, 0);
+            result[carry_pos] = sum.value;
+            if (sum.carry) {
+                memmove(result, result + 1, max_len * sizeof(Trit));
+                result[0] = sum.carry;
+                max_len++;
+            }
+        }
+    }
+    /* Trim leading zeros */
+    int start = 0;
+    while (start < max_len - 1 && result[start] == 0) start++;
+    *result_len = max_len - start;
+    Trit* trimmed = (Trit*)malloc(*result_len * sizeof(Trit));
+    memcpy(trimmed, result + start, *result_len * sizeof(Trit));
+    free(result);
+    return trimmed;
+}
+
+TritDivResult tritjs_divide(Trit* a, int a_len, Trit* b, int b_len) {
+    unsigned long a_bin = trits_to_binary(a, a_len);
+    unsigned long b_bin = trits_to_binary(b, b_len);
+    if (b_bin == 0) {
+        fprintf(stderr, "Error: Division by zero\n");
+        exit(1);
+    }
+    unsigned long quotient_bin = a_bin / b_bin;
+    unsigned long remainder_bin = a_bin % b_bin;
+    TritDivResult result = {
+        .quotient = binary_to_trits(quotient_bin, a_len),
+        .remainder = binary_to_trits(remainder_bin, b_len),
+        .q_len = a_len,
+        .r_len = b_len
+    };
+    return result;
+}
+
+@*1 Utility Functions.
+We provide a string conversion for debugging and a placeholder for native ternary support.
+
+@c
+char* tritjs_to_string(Trit* trits, int len) {
+    char* str = (char*)malloc(len + 1);
+    for (int i = 0; i < len; i++) str[i] = '0' + trits[i];
+    str[len] = '\0';
+    return str;
+}
+
+int tritjs_is_ternary_native(void) {
+    return 0; /* No native ternary support in standard C environments */
+}
+
+@*1 Example Usage.
+Here’s a simple main function to test the library.
+
+@c
+int main() {
+    Trit a[] = {1, 2}; /* 12₃ */
+    Trit b[] = {2, 1}; /* 21₃ */
+    int len;
+    Trit* sum = tritjs_add(a, 2, b, 2, &len);
+    printf("Add: %s\n", tritjs_to_string(sum, len)); /* Should print "110" */
+    free(sum);
+
+    Trit* diff = tritjs_subtract(a, 2, b, 2, &len);
+    printf("Subtract: %s\n", tritjs_to_string(diff, len)); /* Should print "2" */
+    free(diff);
+
+    Trit* prod = tritjs_multiply(a, 2, b, 2, &len);
+    printf("Multiply: %s\n", tritjs_to_string(prod, len)); /* Should print "101" */
+    free(prod);
+
+    TritDivResult div = tritjs_divide(a, 2, b, 2);
+    printf("Divide: %s r %s\n", tritjs_to_string(div.quotient, div.q_len),
+           tritjs_to_string(div.remainder, div.r_len)); /* Should print "02 r 01" */
+    free(div.quotient);
+    free(div.remainder);
+
+    return 0;
+}
