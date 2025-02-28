@@ -37,6 +37,7 @@ It’s built on an open-source large language model (think LLaMA or a descendant
    a) Preemptive Build Failure Detection - Before compiling, Axion scans source code and predicts common build errors.
    b) Automatic CPU-Specific Optimizations - Uses AI to analyse the system's hardware and auto-tunes package compilation flags
    c) Live Performace Feedback - Axion benchmarks packages before and after updates to ensure they perform as expected
+   
 5. Natural Language Package Management (Optional AI CLI)
    (AI interprets the comman and fetches the best matching package or configuration.)
    a) axion install a lightweight browser
