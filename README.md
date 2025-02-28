@@ -12,7 +12,8 @@ Core Features
 
 AI-Powered Package Manager: "Axion"  
 Instead of a traditional apt or pacman, Alexis uses Axion, an AI-driven package manager.  
-Axion predicts your software needs based on usage patterns (e.g., "You’ve been coding in Python a lot—want PyTorch or NumPy?") and optimizes dependency resolution in real time.  
+Axion predicts your software needs based on usage patterns (e.g., "You’ve been coding in Python a lot—want PyTorch or NumPy?") and optimizes dependency resolution in real time.
+
 It’s built on an open-source large language model (think LLaMA or a descendant) fine-tuned for system administration tasks, with a transparent training dataset hosted on a public Git repo.
  
 1. Intelligent Dependency Resolution
