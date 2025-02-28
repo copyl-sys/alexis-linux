@@ -49,14 +49,13 @@ src_prepare() {
     if ! cat > "${S}/README" << 'EOF'
 TritJS 1.0 - Ternary Logic for Alexis Linux
 
-Welcome to Alexis Linux v1.0.0
-Kernel: 6.8.0-alexis
+Welcome to Axion v1.0.0
 AI Core: Online | Learning Mode: Active
 “Ready to assist—how can I make your day smarter?”
 
 Overview:
-  TritJS provides ternary (base-3) arithmetic for Alexis Linux’s AI ecosystem and
-  CISA’s Guardian AI. With -DAXION, it enhances AI with Axion, relying on .cweb
+  Axion provides ternary (base-3) arithmetic for Alexis Linux’s AI ecosystem and
+  CISA Inspired Guardian AI. With -DAXION, it enables AI for Axion, relying on .cweb
   documentation for configuration.
 
 USE Flags:
