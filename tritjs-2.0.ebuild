@@ -6,7 +6,7 @@ EAPI=8
 # Description: Enhanced ternary logic library for Guardian AI’s NIST-compliant cyber defense
 DESCRIPTION="TritJS: Ternary logic library for Alexis Linux AI ecosystem and CISA Guardian AI (NIST-aligned, Work Role 511)"
 HOMEPAGE="https://alexislinux.org/tritjs"
-SRC_URI="https://alexislinux.org/src/tritjs-${PV}.cweb" # Decentralized Git source
+SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS-${PV}.cweb" # Decentralized Git source
 
 LICENSE="GPL-3"
 SLOT="0"
