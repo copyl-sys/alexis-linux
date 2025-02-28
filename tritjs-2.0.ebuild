@@ -6,7 +6,7 @@ EAPI=8
 # Description of the package
 DESCRIPTION="TritJS: A ternary logic arithmetic library implemented in CWEB"
 HOMEPAGE="https://copyleftsystems.com/tritjs" # Placeholder; replace with actual URL if available
-SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/tritjs-2.0.cweb" # Placeholder; adjust to real source location
+SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS.cweb" # Placeholder; adjust to real source location
 
 # Licensing and package metadata
 LICENSE="GPL-2" # Assuming GPL-2; adjust based on intended license
