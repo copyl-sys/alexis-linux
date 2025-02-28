@@ -14,7 +14,20 @@ AI-Powered Package Manager: "Axion"
 Instead of a traditional apt or pacman, Alexis uses Axion, an AI-driven package manager.  
 Axion predicts your software needs based on usage patterns (e.g., "You’ve been coding in Python a lot—want PyTorch or NumPy?") and optimizes dependency resolution in real time.  
 It’s built on an open-source large language model (think LLaMA or a descendant) fine-tuned for system administration tasks, with a transparent training dataset hosted on a public Git repo.
+ 
+1. Intelligent Dependency Resolution
+   a) Preemptive Conflict Detection - Instead of waiting for dependency errors, Axion simulates installations and predicts breakages in advance.
+   
+   b) AI-Based Alternative Suggestions - If a dependency conflict arises, Axion offers alternative package versions or compatiable forks.
 
+   c) Source vs. Binary Awareness - Users can toggle beteen source builds and precompiled binaries dynamically bassed on system performance.
+
+2. AI- Guided Updates & Security Patching
+   a) Automated Patch Analysis ...
+3. Context-Aware Package Recommendations
+4. AI-Assisted Compilation & Optimization
+5. Natural Language Package Management (Optional AI CLI)
+ 
 System Configuration with "CogniSys"  
 No more cryptic config files (unless you want them). CogniSys is an AI assistant that manages everything from network settings to kernel parameters.  
 Example: Say, “Set up a dual-boot with encrypted LVM,” and CogniSys generates the commands, explains them, and applies them—or lets you tweak them manually.  
