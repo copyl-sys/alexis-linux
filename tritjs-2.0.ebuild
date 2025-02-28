@@ -3,7 +3,7 @@
 
 EAPI=8
 
-DESCRIPTION="TritJS: Ternary logic library for Alexis Linux AI ecosystem and CISA Guardian AI, with optional Axion AI enhancement"
+DESCRIPTION="TritJS: Ternary logic library for Alexis Linux AI ecosystem and CISA Inspired Guardian AI, with optional Axion AI enhancement"
 HOMEPAGE="https://alexislinux.org/tritjs"
 SRC_URI="https://alexislinux.org/src/tritjs-${PV}.cweb"
 
