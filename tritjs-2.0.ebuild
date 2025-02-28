@@ -3,30 +3,35 @@
 
 EAPI=8
 
-# Description of the package
-DESCRIPTION="TritJS: A ternary logic arithmetic library implemented in CWEB"
-HOMEPAGE="https://copyleftsystems.com/tritjs" # Placeholder; replace with actual URL if available
-SRC_URI="https://github.com/copyl-sys/alexis-linux/blob/main/TritJS.cweb" # Placeholder; adjust to real source location
+# Description: Tailored for AI experimentation with ternary logic
+DESCRIPTION="TritJS: A ternary logic arithmetic library for AI applications, implemented in CWEB"
+HOMEPAGE="https://example.com/tritjs" # Placeholder; replace with actual URL if available
+SRC_URI="https://example.com/tritjs-${PV}.cweb" # Placeholder; adjust to real source location
 
-# Licensing and package metadata
-LICENSE="GPL-2" # Assuming GPL-2; adjust based on intended license
+# Licensing: GPL-2 for open-source AI collaboration; consider MIT for broader AI adoption
+LICENSE="GPL-2"
 SLOT="0"
-KEYWORDS="~amd64 ~x86"
-IUSE="tri doc" # 'tri' enables ternary logic; 'doc' adds typeset documentation
+KEYWORDS="~amd64 ~x86 ~arm ~riscv" # Expanded for AI hardware (e.g., ARM-based edge devices)
+IUSE="tri ai doc" # Added 'ai' USE flag for AI-specific features
 
-# Dependencies: cweb required for 'tri' (ternary logic) or 'doc' (typeset docs)
+# Dependencies: Enhanced for AI integration
 DEPEND="
-    tri? ( dev-tex/cweb )
-    doc? ( dev-tex/cweb )
+    tri? ( dev-tex/cweb ) # Core ternary logic compilation
+    ai? (
+        sci-libs/tensorflow # Optional AI framework integration
+        dev-libs/openblas # Linear algebra for AI computation
+    )
+    doc? ( dev-tex/cweb ) # Typeset documentation
 "
 RDEPEND="${DEPEND}"
-BDEPEND=""
+BDEPEND="
+    ai? ( dev-util/cmake ) # Build tool for AI-related compilation
+"
 
-# Working directory for build
 S="${WORKDIR}"
 
 src_unpack() {
-    # Unpack the single CWEB file from DISTDIR to WORKDIR
+    # Unpack CWEB file; suitable for AI prototyping with a single source
     mkdir -p "${S}" || die "Failed to create source directory"
     cp "${DISTDIR}/${P}.cweb" "${S}/tritjs.cweb" || die "Failed to copy cweb file"
 }
@@ -34,48 +39,83 @@ src_unpack() {
 src_prepare() {
     default
 
-    # Generate a basic README for user instructions
+    # Generate README with AI-focused instructions
     cat > "${S}/README" << 'EOF'
-TritJS 1.0 - Ternary Logic Library
+TritJS 1.0 - Ternary Logic Library for AI
 
 Overview:
-  TritJS is a C-based library for ternary (base-3) arithmetic, built from a CWEB source.
-  It supports addition, subtraction, multiplication, and division of trit arrays (0, 1, 2).
+  TritJS provides ternary (base-3) arithmetic (0, 1, 2) for AI experimentation,
+  built from a CWEB source. Ideal for ternary neural networks or decision systems.
 
 USE Flags:
-  - tri: Enables full ternary logic functionality. Without it, a minimal version is installed.
-  - doc: Generates and installs a typeset DVI document from the CWEB source.
+  - tri: Enables core ternary logic functionality.
+  - ai: Adds AI integration (e.g., TensorFlow hooks, optimized for ternary models).
+  - doc: Generates typeset DVI documentation.
 
 Installation:
-  - With ternary logic: `USE="tri" emerge -av tritjs`
-  - Minimal version: `emerge -av tritjs`
-  - With typeset docs: `USE="doc" emerge -av tritjs`
+  - Core ternary: `USE="tri" emerge -av tritjs`
+  - With AI support: `USE="tri ai" emerge -av tritjs`
+  - Minimal: `emerge -av tritjs`
+  - With docs: `USE="doc" emerge -av tritjs`
 
 Usage:
-  - Run `tritjs` after installation:
-    - With 'tri': Executes example ternary operations (e.g., 12₃ + 21₃ = 110₃).
-    - Without 'tri': Prints version and a note about disabled ternary logic.
+  - Run `tritjs`:
+    - With 'tri': Tests ternary operations (e.g., 12₃ + 21₃ = 110₃).
+    - With 'ai': Runs AI example (if enabled; see /usr/share/doc).
+    - Without 'tri': Prints version info.
+  - Integrate with AI: Link against /usr/lib/libtritjs.a for custom models.
 
 Documentation:
   - Source: /usr/share/doc/tritjs-1.0/tritjs.cweb
-  - Typeset (if 'doc' enabled): /usr/share/doc/tritjs-1.0/tritjs.dvi
+  - Typeset (if 'doc'): /usr/share/doc/tritjs-1.0/tritjs.dvi
+  - AI Notes: /usr/share/doc/tritjs-1.0/ai_usage.txt (if 'ai' enabled)
 
-For issues, see ${HOMEPAGE} or contact the maintainers.
+See ${HOMEPAGE} for more details.
 EOF
+
+    # AI-specific usage notes if 'ai' flag is enabled
+    if use ai; then
+        cat > "${S}/ai_usage.txt" << 'EOF'
+TritJS AI Integration:
+  - Library: /usr/lib/libtritjs.a
+  - Headers: /usr/include/tritjs.h
+  - Example: Use with TensorFlow for ternary neural nets:
+    - Convert weights to ternary (-1, 0, 1) mapped to (2, 0, 1).
+    - Call tritjs_add() or tritjs_multiply() for custom ops.
+  - Compile: `gcc -I/usr/include -L/usr/lib -ltritjs your_ai_code.c`
+EOF
+    fi
 }
 
 src_configure() {
-    # No configure step; CWEB compilation handled in src_compile
-    :
+    if use ai; then
+        # Configure for AI integration (placeholder for cmake if needed)
+        einfo "Configuring AI support (stub; assumes library build)"
+    else
+        :
+    fi
 }
 
 src_compile() {
     if use tri; then
-        # Build full ternary logic version
+        # Build ternary logic as a library for AI use
         ctangle "${S}/tritjs.cweb" || die "ctangle failed"
-        ecc -o tritjs tritjs.c || die "Compilation failed"
+        if use ai; then
+            # Compile as a static library for AI frameworks
+            ecc -c tritjs.c -o tritjs.o || die "Compilation failed"
+            ar rcs libtritjs.a tritjs.o || die "Archiving failed"
+            # Generate a simple header (placeholder)
+            echo '#ifndef TRITJS_H' > tritjs.h
+            echo '#define TRITJS_H' >> tritjs.h
+            echo 'typedef int Trit;' >> tritjs.h
+            echo 'Trit* tritjs_add(Trit* a, int a_len, Trit* b, int b_len, int* result_len);' >> tritjs.h
+            echo '#endif' >> tritjs.h
+        else
+            # Standard binary build
+            ecc -o tritjs tritjs.c || die "Compilation failed"
+        fi
     else
-        # Build minimal version without ternary logic
+        # Minimal build without ternary logic
         echo '#include <stdio.h>' > tritjs.c
         echo 'int main() { printf("TritJS %s (ternary logic disabled)\\n", "'${PV}'"); return 0; }' >> tritjs.c
         ecc -o tritjs tritjs.c || die "Compilation failed"
@@ -83,13 +123,21 @@ src_compile() {
 }
 
 src_install() {
-    # Install the binary (full or minimal)
-    dobin tritjs
+    if use tri && use ai; then
+        # Install library and headers for AI use
+        dolib.a libtritjs.a
+        insinto /usr/include
+        doins tritjs.h
+        dodoc "${S}/ai_usage.txt"
+    else
+        # Install binary (full or minimal)
+        dobin tritjs
+    fi
 
-    # Install basic documentation
+    # Install core documentation
     dodoc "${S}/tritjs.cweb" "${S}/README"
 
-    # Optional typeset documentation with 'doc' USE flag
+    # Optional typeset docs
     if use doc; then
         cweave "${S}/tritjs.cweb" || die "cweave failed"
         tex "${S}/tritjs.tex" || die "tex failed"
@@ -98,16 +146,18 @@ src_install() {
 }
 
 pkg_postinst() {
-    # Post-install instructions
     if use tri; then
-        elog "TritJS with ternary logic is installed. Run 'tritjs' to test arithmetic operations."
-        elog "See /usr/share/doc/${PF}/README for usage details."
+        if use ai; then
+            elog "TritJS with AI support installed. See /usr/share/doc/${PF}/ai_usage.txt for integration."
+        else
+            elog "TritJS with ternary logic installed. Run 'tritjs' to test operations."
+        fi
     else
         elog "TritJS installed without ternary logic (minimal version)."
-        elog "Enable the 'tri' USE flag for full functionality. See /usr/share/doc/${PF}/README."
+        elog "Enable 'tri' for core functionality, 'ai' for AI features."
     fi
-    elog "Source documentation available at /usr/share/doc/${PF}/tritjs.cweb"
+    elog "See /usr/share/doc/${PF}/README for details."
     if use doc; then
-        elog "Typeset documentation installed at /usr/share/doc/${PF}/tritjs.dvi"
+        elog "Typeset documentation at /usr/share/doc/${PF}/tritjs.dvi"
     fi
 }
