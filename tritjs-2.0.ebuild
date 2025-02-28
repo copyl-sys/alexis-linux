@@ -47,7 +47,7 @@ src_prepare() {
 
     einfo "Preparing documentation..."
     if ! cat > "${S}/README" << 'EOF'
-TritJS 1.0 - Ternary Logic for Alexis Linux
+Axion 1.0 - Ternary Package Manager
 
 Welcome to Axion v1.0.0
 AI Core: Online | Learning Mode: Active
