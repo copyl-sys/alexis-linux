@@ -1,0 +1,16 @@
+@* Axion TritJS Integration.
+@
+\def\SSRC_URI {"https://github.com/copyl-sys/alexis-linux/blob/main/TritJS.cweb"}
+
+@c
+#include <stdio.h>
+
+void axion_initialize() {
+    printf("Initializing Axion TritJS Integration...\n");
+    printf("Source URI: %s\n", \SSRC_URI);
+}
+
+int main() {
+    axion_initialize();
+    return 0;
+}
