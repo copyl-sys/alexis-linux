@@ -8,7 +8,7 @@ include:
 - Fractional support via `TritFloat` for precise results (e.g., sin(12₃) ≈ 0.221₃).
 - Arbitrary-precision arithmetic via `TritBigInt` to handle large numbers.
 - Accurate trigonometric scaling using a ternary π constant.
-- An interactive CLI for user input.
+- An interactive CLI for user input, now with add, sub, mul, sin, and pi implemented.
 - Robust error handling with a `TritError` enum to manage failures gracefully.
 
 The library emulates ternary computation on binary hardware, using trit-based operations where possible and
@@ -469,7 +469,7 @@ TritError tritfloat_to_string(TritFloat tf, char** str) {
 }
 
 @*1 CLI Functions.
-Interactive command-line interface with error handling and user feedback.
+Interactive command-line interface with error handling and user feedback, now including sub and mul.
 
 @c
 /* Parses a string (e.g., "12") into a TritBigInt */
@@ -528,6 +528,34 @@ void run_calculator() {
         if (strcmp(op, "add") == 0 && b) {
             TritBigInt* result;
             if ((err = tritjs_add_big(a, b, &result)) != TRIT_OK) {
+                printf("Error: %s\n", trit_error_str(err));
+            } else {
+                char* str;
+                if ((err = tritjs_to_string(result->digits, result->len, &str)) != TRIT_OK) {
+                    printf("Error: %s\n", trit_error_str(err));
+                } else {
+                    printf("%s\n", str);
+                    free(str);
+                }
+                tritbig_free(result);
+            }
+        } else if (strcmp(op, "sub") == 0 && b) {
+            TritBigInt* result;
+            if ((err = tritjs_subtract_big(a, b, &result)) != TRIT_OK) {
+                printf("Error: %s\n", trit_error_str(err));
+            } else {
+                char* str;
+                if ((err = tritjs_to_string(result->digits, result->len, &str)) != TRIT_OK) {
+                    printf("Error: %s\n", trit_error_str(err));
+                } else {
+                    printf("%s\n", str);
+                    free(str);
+                }
+                tritbig_free(result);
+            }
+        } else if (strcmp(op, "mul") == 0 && b) {
+            TritBigInt* result;
+            if ((err = tritjs_multiply_big(a, b, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
