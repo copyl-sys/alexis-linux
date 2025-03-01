@@ -972,36 +972,36 @@ typedef struct {
 TritHelpCategory help_categories[MAX_HELP_CATEGORIES] = {
     {
         "Arithmetic Operations", {
-            {"add", "Adds two ternary numbers or complex numbers."},
-            {"sub", "Subtracts the second number from the first."},
-            {"mul", "Multiplies two numbers in base-3."},
-            {"div", "Divides two numbers, showing quotient and remainder."},
-            {"pow", "Raises a number to a ternary exponent."},
-            {"fact", "Computes the factorial of a number."},
-            {NULL, NULL}
+            {"add", "Adds two ternary numbers or complex numbers.", "Example: add 12 2 → 14"},
+            {"sub", "Subtracts the second number from the first.", "Example: sub 21 12 → 10"},
+            {"mul", "Multiplies two numbers in base-3.", "Example: mul 11 2 → 22"},
+            {"div", "Divides two numbers, showing quotient and remainder.", "Example: div 12 2 → 6 r 0"},
+            {"pow", "Raises a number to a ternary exponent.", "Example: pow 2 3 → 222"},
+            {"fact", "Computes the factorial of a number.", "Example: fact 5 → 210"},
+            {NULL, NULL, NULL}
         }
     },
     {
         "Scientific Functions", {
-            {"sqrt", "Computes the square root (supports complex numbers)."},
-            {"log3", "Computes the base-3 logarithm (supports complex)."},
-            {"pi", "Displays the value of π in base-3."},
-            {NULL, NULL}
+            {"sqrt", "Computes the square root (supports complex numbers).", "Example: sqrt 10 → 1.01"},
+            {"log3", "Computes the base-3 logarithm (supports complex).", "Example: log3 9 → 2"},
+            {"pi", "Displays the value of π in base-3.", "Example: pi → 10.010211"},
+            {NULL, NULL, NULL}
         }
     },
     {
         "Trigonometric Functions", {
-            {"sin", "Computes the sine function."},
-            {"cos", "Computes the cosine function."},
-            {"tan", "Computes the tangent function."},
-            {NULL, NULL}
+            {"sin", "Computes the sine function.", "Example: sin 10 → 1.12"},
+            {"cos", "Computes the cosine function.", "Example: cos 10 → 0.12"},
+            {"tan", "Computes the tangent function.", "Example: tan 10 → 1.21"},
+            {NULL, NULL, NULL}
         }
     },
     {
         "General Commands", {
-            {"help", "Displays this help message."},
-            {"quit", "Exits the calculator."},
-            {NULL, NULL}
+            {"help", "Displays this help message.", "Example: help add"},
+            {"quit", "Exits the calculator.", "Example: quit"},
+            {NULL, NULL, NULL}
         }
     }
 };
