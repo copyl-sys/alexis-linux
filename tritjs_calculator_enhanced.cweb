@@ -60,8 +60,8 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
     if (!temp) return TRIT_ERR_MEM;
     /* Rest unchanged */
 }
-TritError tritjs_subtract_big(TritBigInt* a, TritBigInit* b, TritBigInt** result);
-TritError tritjs_multiply_big(TritBigInt* a, TritBigInit* b, TritBigInt** result);
+TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
+TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision) {
     /* Existing checks and setup */
     TritBigInt* temp_rem = NULL;
