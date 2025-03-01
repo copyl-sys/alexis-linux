@@ -53,7 +53,7 @@ Inputs are base-3 (trits: 0, 1, 2). Save/load uses \.{.trit} files.
 #define MAX_SCRIPT_CMDS 50
 #define MAX_FILENAME 256
 
-/* Data Structures (Moved Up) */
+/* Data Structures */
 typedef int Trit;
 typedef struct {
     int sign;
@@ -113,6 +113,14 @@ TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result);
 TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result);
 TritError tritjs_pi(int* len, Trit** pi);
 void cleanup_div(TritBigInt* temp_rem, TritFloat* dividend, TritFloat* divisor, TritDivResult* result);
+TritError parse_trit_string(const char* str, TritBigInt** bi);
+TritError tritbig_from_trits(Trit* trits, int len, int sign, TritBigInt** bi);
+void tritbig_free(TritBigInt* bi);
+TritError tritfloat_from_bigint(TritBigInt* bi, TritFloat* tf);
+void tritfloat_free(TritFloat tf);
+TritError tritjs_to_string(TritBigInt* bi, char** str);
+TritError tritfloat_to_string(TritFloat tf, char** str);
+TritError tritcomplex_to_string(TritComplex tc, char** str);
 
 /* Quicksort implementation */
 void quicksort(int* arr, int low, int high) {
@@ -136,8 +144,8 @@ void quicksort(int* arr, int low, int high) {
     }
 }
 
-/* Mergesort implementation */
-void merge(int* arr, int l, int m, int r) {
+/* Trit-specific Mergesort implementation */
+void trit_merge(int* arr, int l, int m, int r) {
     int n1 = m - l + 1, n2 = r - m;
     int* L = malloc(n1 * sizeof(int));
     int* R = malloc(n2 * sizeof(int));
@@ -154,12 +162,12 @@ void merge(int* arr, int l, int m, int r) {
     free(R);
 }
 
-void mergesort(int* arr, int l, int r) {
+void trit_mergesort(int* arr, int l, int r) {
     if (l < r) {
         int m = l + (r - l) / 2;
-        mergesort(arr, l, m);
-        mergesort(arr, m + 1, r);
-        merge(arr, l, m, r);
+        trit_mergesort(arr, l, m);
+        trit_mergesort(arr, m + 1, r);
+        trit_merge(arr, l, m, r);
     }
 }
 
@@ -195,7 +203,7 @@ void display_memory_and_stats(const char* operation, const char* sort_method) {
         if (strcmp(sort_method, "quick") == 0) {
             quicksort(all_trits, 0, total_trits - 1);
         } else {
-            mergesort(all_trits, 0, total_trits - 1);
+            trit_mergesort(all_trits, 0, total_trits - 1);
         }
         if (total_trits % 2 == 0) {
             median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
