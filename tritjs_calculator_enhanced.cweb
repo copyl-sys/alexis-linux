@@ -302,7 +302,7 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
     /* Convert inputs to TritFloat */
     TritFloat dividend, divisor;
     TritError err;
-    if ((err = tritfloat_from_bigint(a, ÷nd)) != TRIT_OK) return err;
+    if ((err = tritfloat_from_bigint(a, &dividend)) != TRIT_OK) return err;
     if ((err = tritfloat_from_bigint(b, &divisor)) != TRIT_OK) {
         tritfloat_free(dividend);
         return err;
