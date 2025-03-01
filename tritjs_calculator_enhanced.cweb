@@ -1,4 +1,4 @@
-@* TritJS: Advanced Ternary Scientific Calculator with Complex Number Support.
+@* Alexis Linux: Advanced Ternary Scientific Calculator with Complex Number Support.
 This document defines \.{TritJS}, a library for ternary (base-3) arithmetic and scientific operations,
 adapted from a JavaScript module into C. It supports basic arithmetic (addition, subtraction, multiplication,
 division), scientific functions (exponentiation, square roots, base-3 logarithms, sine, cosine, tangent,
