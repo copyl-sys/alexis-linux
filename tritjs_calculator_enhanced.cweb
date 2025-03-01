@@ -68,7 +68,18 @@ static Script scripts[10] = {0};
 static int script_count = 0;
 
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
-/* Other prototypes unchanged */
+TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
+TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
+TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision);
+TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** result);
+TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result);
+TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_sin_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_pi(int* len, Trit** pi);
+void cleanup_div(TritBigInt* temp_rem, TritFloat* dividend, TritFloat* divisor, TritDivResult* result);
 
 /* Quicksort implementation */
 void quicksort(int* arr, int low, int high) {
@@ -123,7 +134,6 @@ void display_memory_and_stats(const char* operation, const char* sort_method) {
     int bar_length = (int)((total_mapped_bytes * MAX_DISPLAY_WIDTH) / MAX_MMAP_SIZE);
     if (bar_length > MAX_DISPLAY_WIDTH) bar_length = MAX_DISPLAY_WIDTH;
 
-    /* Calculate stats from history */
     double mean = 0.0;
     int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
     int* all_trits = NULL;
@@ -151,7 +161,7 @@ void display_memory_and_stats(const char* operation, const char* sort_method) {
     if (total_trits > 0) {
         if (strcmp(sort_method, "quick") == 0) {
             quicksort(all_trits, 0, total_trits - 1);
-        } else { /* merge or auto-selected */
+        } else {
             mergesort(all_trits, 0, total_trits - 1);
         }
         if (total_trits % 2 == 0) {
@@ -259,12 +269,12 @@ TritError load_state(const char* filename) {
         return TRIT_ERR_INPUT;
     }
 
-    clear_history_and_vars(); /* Reset current state */
+    clear_history_and_vars();
     char line[256];
     Script* current_script = NULL;
     while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\n")] = 0;
-        if (line[0] == '#') continue; /* Skip comments */
+        if (line[0] == '#') continue;
 
         if (strncmp(line, "H: ", 3) == 0 && history_count < MAX_HISTORY) {
             history[history_count] = strdup(line + 3);
@@ -543,13 +553,10 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
     for (int i = 0; i < b->len; i++) {
         if (b->digits[i] != 0) { b_is_zero = 0; break; }
     }
-    if (b_is_zero) {
-        log_error(TRIT_ERR_DIV_ZERO, "tritjs_divide_big");
-        return TRIT_ERR_DIV_ZERO;
-    }
+    if (b_is_zero) return TRIT_ERR_DIV_ZERO;
 
     TritFloat dividend = {0}, divisor = {0};
-    if ((err = tritfloat_from_bigint(a, ÷nd)) != TRIT_OK) return err;
+    if ((err = tritfloat_from_bigint(a, &dividend)) != TRIT_OK) return err;
     if ((err = tritfloat_from_bigint(b, &divisor)) != TRIT_OK) {
         tritfloat_free(dividend);
         return err;
@@ -1099,7 +1106,6 @@ TritError execute_command(const char* input, int is_script) {
     TritBigInt* b = NULL;
     TritError err;
 
-    /* Handle variable assignment */
     if (strchr(arg1, '=') && !arg2[0]) {
         char var_name[2] = {arg1[0], '\0'};
         char* value = strchr(arg1, '=') + 1;
@@ -1112,7 +1118,6 @@ TritError execute_command(const char* input, int is_script) {
         return TRIT_OK;
     }
 
-    /* Parse arguments */
     if (arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0') {
         a = recall_variable(arg1);
         if (!a) {
