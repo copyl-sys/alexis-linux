@@ -1,19 +1,19 @@
-
-@* TritJS-CISA: A Ternary Calculator with AI-Driven Stats and Scripting.
+@* TritJS-CISA: A Ternary Calculator with AI-Driven Stats, Scripting, and Save/Load.
 This document defines \.{TritJS-CISA}, an advanced ternary (base-3) scientific calculator
 designed for the Cybersecurity and Infrastructure Security Agency (CISA), surpassing the
-TI-82 with ternary statistics (mean, mode, median) optimized via AI-driven sorting and
-basic scripting in an ASCII-only interface. Built in C and shipped as a \.{.cweb} literate
-program, it emulates ternary computation on binary hardware, optimized for cybersecurity
-tasks and educational use. Enhancements include:
+TI-82 with ternary statistics (mean, mode, median) optimized via AI-driven sorting, basic
+scripting, and save/load capabilities in an ASCII-only interface. Built in C and shipped
+as a \.{.cweb} literate program, it emulates ternary computation on binary hardware,
+optimized for cybersecurity tasks and educational use. Enhancements include:
 
 - **Memory-Mapped Files**: \.{mmap} for trit arrays, visualized with stats.
 - **Security Hardening**: Audit logging to \.{/var/log/tritjs_cisa.log} and memory safety.
 - **Complex Arithmetic**: \.{TritFloat}, \.{TritBigInt}, \.{TritComplex}.
 - **Scientific Functions**: Exponentiation, roots, logarithms, trigonometry, factorials.
-- **Interactive CLI**: History, variables (A-Z), AI-optimized stats, and scripting.
+- **Interactive CLI**: History, variables (A-Z), AI-optimized stats, scripting, and save/load.
+- **MIME Type**: \.{application/x-tritjs-cisa} for \.{.trit} files.
 
-This version, dated March 01, 2025, uses propositional logic for sorting optimization.
+This version, dated March 01, 2025, adds persistent storage.
 
 @*1 Usage and Documentation.
 Compile and run:
@@ -22,15 +22,16 @@ Compile and run:
 - \.{gcc -o tritjs_cisa tritjs_cisa.c -lm}.
 - \.{./tritjs_cisa}.
 
-Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{A=12}, \.{stats quick}.
+Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{A=12}, \.{save work.trit}.
 Operations:
 - Arithmetic: \.{add}, \.{sub}, \.{mul}, \.{div}, \.{pow}, \.{fact}
 - Scientific: \.{sqrt}, \.{log3}, \.{sin}, \.{cos}, \.{tan}, \.{pi}
 - Stats: \.{stats [quick|merge]} (mean, mode, median; auto-selects if unspecified)
 - Scripting: \.{PROG <name> { <cmds> }}, \.{RUN <name>}
+- Storage: \.{save <file>}, \.{load <file>} (uses \.{application/x-tritjs-cisa} MIME type)
 - General: \.{help}, \.{quit}, \.{recall <n>}, \.{<var>=<value>}, \.{clear}
 
-Inputs are base-3 (trits: 0, 1, 2). AI optimizes stats sorting.
+Inputs are base-3 (trits: 0, 1, 2). Save/load uses \.{.trit} files.
 
 @*1 Implementation.
 @c
@@ -50,6 +51,7 @@ Inputs are base-3 (trits: 0, 1, 2). AI optimizes stats sorting.
 #define MAX_VAR_NAME 2
 #define MAX_SCRIPT_NAME 10
 #define MAX_SCRIPT_CMDS 50
+#define MAX_FILENAME 256
 
 /* Global state */
 static long total_mapped_bytes = 0;
@@ -208,6 +210,83 @@ void clear_history_and_vars() {
             variables[i] = NULL;
         }
     }
+    for (int i = 0; i < script_count; i++) {
+        scripts[i].cmd_count = 0;
+    }
+    script_count = 0;
+}
+
+TritError save_state(const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        printf("Error: Could not open file %s for writing\n", filename);
+        return TRIT_ERR_INPUT;
+    }
+
+    fprintf(f, "# TritJS-CISA State File (MIME: application/x-tritjs-cisa)\n");
+    fprintf(f, "# History\n");
+    for (int i = 0; i < history_count; i++) {
+        fprintf(f, "H: %s\n", history[i]);
+    }
+
+    fprintf(f, "# Variables\n");
+    for (int i = 0; i < 26; i++) {
+        if (variables[i]) {
+            char* str;
+            if (tritjs_to_string(variables[i], &str) == TRIT_OK) {
+                fprintf(f, "V: %c=%s\n", 'A' + i, str);
+                free(str);
+            }
+        }
+    }
+
+    fprintf(f, "# Scripts\n");
+    for (int i = 0; i < script_count; i++) {
+        fprintf(f, "S: %s\n", scripts[i].name);
+        for (int j = 0; j < scripts[i].cmd_count; j++) {
+            fprintf(f, "C: %s\n", scripts[i].commands[j]);
+        }
+    }
+
+    fclose(f);
+    return TRIT_OK;
+}
+
+TritError load_state(const char* filename) {
+    FILE* f = fopen(filename, "r");
+    if (!f) {
+        printf("Error: Could not open file %s for reading\n", filename);
+        return TRIT_ERR_INPUT;
+    }
+
+    clear_history_and_vars(); /* Reset current state */
+    char line[256];
+    Script* current_script = NULL;
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\n")] = 0;
+        if (line[0] == '#') continue; /* Skip comments */
+
+        if (strncmp(line, "H: ", 3) == 0 && history_count < MAX_HISTORY) {
+            history[history_count] = strdup(line + 3);
+            history_count++;
+        } else if (strncmp(line, "V: ", 3) == 0) {
+            char var_name[2] = {line[3], '\0'};
+            char* value = line + 5;
+            TritBigInt* bi;
+            if (parse_trit_string(value, &bi) == TRIT_OK) {
+                store_variable(var_name, bi);
+            }
+        } else if (strncmp(line, "S: ", 3) == 0 && script_count < 10) {
+            current_script = &scripts[script_count++];
+            strncpy(current_script->name, line + 3, MAX_SCRIPT_NAME - 1);
+            current_script->cmd_count = 0;
+        } else if (strncmp(line, "C: ", 3) == 0 && current_script && current_script->cmd_count < MAX_SCRIPT_CMDS) {
+            strncpy(current_script->commands[current_script->cmd_count++], line + 3, 255);
+        }
+    }
+
+    fclose(f);
+    return TRIT_OK;
 }
 
 Script* find_script(const char* name) {
@@ -308,7 +387,7 @@ TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_p
     *is_mapped = 1;
     total_mapped_bytes += len * sizeof(Trit);
     operation_steps++;
-    display_memory_and_stats("Mapping", "merge"); /* Default for mapping */
+    display_memory_and_stats("Mapping", "merge");
     unlink(tmp_path);
     return TRIT_OK;
 }
@@ -952,7 +1031,7 @@ TritError tritcomplex_to_string(TritComplex tc, char** str) {
     return TRIT_OK;
 }
 
-@*2 CLI for CISA with AI-Driven Stats and Scripting.
+@*2 CLI for CISA with AI-Driven Stats, Scripting, and Save/Load.
 @c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
     if (!str || !strlen(str)) return TRIT_ERR_INPUT;
@@ -995,7 +1074,10 @@ void print_help() {
     printf("Memory:\n");
     printf("  <A-Z>=<val>  - Store value in variable (e.g., A=12)\n");
     printf("  recall <n>   - Recall nth last result (0 = latest)\n");
-    printf("  clear        - Clear history and variables\n");
+    printf("  clear        - Clear history, variables, and scripts\n");
+    printf("Storage:\n");
+    printf("  save <file>  - Save state to file (.trit)\n");
+    printf("  load <file>  - Load state from file (.trit)\n");
     printf("Scripting:\n");
     printf("  PROG <name> {<cmds>} - Define script (e.g., PROG LOOP {add A 1; A=A})\n");
     printf("  RUN <name>   - Run named script\n");
@@ -1332,7 +1414,7 @@ void run_calculator() {
         }
         if (strcmp(input, "clear") == 0) {
             clear_history_and_vars();
-            printf("History and variables cleared\n");
+            printf("History, variables, and scripts cleared\n");
             continue;
         }
         if (strncmp(input, "stats", 5) == 0) {
@@ -1368,14 +1450,13 @@ void run_calculator() {
             }
             double median = -1;
             if (total_trits > 0) {
-                /* Propositional Logic for AI */
-                int P = (total_trits < 10); /* Small history */
-                int Q = (trit_counts[0] > total_trits / 4 && trit_counts[1] > total_trits / 4 && trit_counts[2] > total_trits / 4); /* Uniform */
-                int R = 1; /* Assume speed preference */
+                int P = (total_trits < 10);
+                int Q = (trit_counts[0] > total_trits / 4 && trit_counts[1] > total_trits / 4 && trit_counts[2] > total_trits / 4);
+                int R = 1;
                 const char* chosen_method = sort_method;
                 if (strcmp(sort_method, "auto") == 0) {
-                    if (P && !Q) chosen_method = "quick"; /* Small, non-uniform → quicksort */
-                    else chosen_method = "merge"; /* Large or uniform → mergesort */
+                    if (P && !Q) chosen_method = "quick";
+                    else chosen_method = "merge";
                 }
                 if (strcmp(chosen_method, "quick") == 0) {
                     quicksort(all_trits, 0, total_trits - 1);
@@ -1395,7 +1476,22 @@ void run_calculator() {
             free(all_trits);
             continue;
         }
-
+        if (strncmp(input, "save ", 5) == 0) {
+            char filename[MAX_FILENAME];
+            sscanf(input + 5, "%255s", filename);
+            if (save_state(filename) == TRIT_OK) {
+                printf("State saved to %s\n", filename);
+            }
+            continue;
+        }
+        if (strncmp(input, "load ", 5) == 0) {
+            char filename[MAX_FILENAME];
+            sscanf(input + 5, "%255s", filename);
+            if (load_state(filename) == TRIT_OK) {
+                printf("State loaded from %s\n", filename);
+            }
+            continue;
+        }
         if (strncmp(input, "PROG ", 5) == 0) {
             char script_name[MAX_SCRIPT_NAME];
             char* brace_start = strchr(input, '{');
@@ -1409,6 +1505,16 @@ void run_calculator() {
             strncpy(script->name, script_name, MAX_SCRIPT_NAME - 1);
             script->cmd_count = 0;
 
+            char* cmd_start = brace_start + 1;
+            while (cmd_start < brace_end && script->cmd_count < MAX_SCRIPT_CMDS) {
+                char* cmd_end = strchr(cmd_start, ';');
+                if (!cmd_end || cmd_end > brace_end) cmd_end = brace_end;
+                int len = cmd_end - cmd_start;
+                while (*cmd_start == ' ') cmd_start++, len--;
+                if (len > 0) {
+                    strncpy(script->commands[script->cmd_count], cmd_start, len);
+                    script->commands[script->cmd_count][len] = '\0';
+                   
             char* cmd_start = brace_start + 1;
             while (cmd_start < brace_end && script->cmd_count < MAX_SCRIPT_CMDS) {
                 char* cmd_end = strchr(cmd_start, ';');
