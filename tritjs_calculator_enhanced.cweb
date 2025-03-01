@@ -1,17 +1,19 @@
-@* TritJS: Enhanced Ternary Scientific Calculator with Advanced Features.
+@* TritJS: Advanced Ternary Scientific Calculator with Complex Number Support.
 This document defines \.{TritJS}, a library for ternary (base-3) arithmetic and scientific operations,
 adapted from a JavaScript module into C. It supports basic arithmetic (addition, subtraction, multiplication,
 division), scientific functions (exponentiation, square roots, base-3 logarithms, sine, cosine, tangent,
 factorials), and constants like π, all operating on trit arrays (digits in $\{0, 1, 2\}$). Key enhancements
 include:
 
-- Sign handling for negative numbers, inspired by AI systems, using a sign-magnitude approach.
-- Fractional support via `TritFloat` for precise results (e.g., sin(12₃) ≈ 0.221₃).
-- Arbitrary-precision arithmetic via `TritBigInt` to handle large numbers.
-- Accurate trigonometric scaling using a ternary π constant.
-- Native fractional division in `tritjs_divide_big` using `TritFloat`.
-- An interactive CLI with add, sub, mul, div, pow, sqrt, log3, sin, cos, tan, fact, and pi.
-- Refined error handling with detailed error codes and consistent cleanup.
+- Fractional support via `TritFloat` for precise results.
+- Arbitrary-precision arithmetic via `TritBigInt` for large numbers.
+- Complex number support via `TritComplex` for operations yielding real and imaginary parts (e.g., sqrt(-1), log3).
+- Optimized native fractional division with sign handling.
+- An interactive CLI with comprehensive operation support.
+- Refined error handling with detailed diagnostics.
+
+The library emulates ternary computation on binary hardware, prioritizing trit-based operations and extending
+to complex arithmetic for AI-inspired applications.
 
 @c
 #include <stdio.h>
@@ -20,7 +22,7 @@ include:
 #include <math.h>
 
 @*1 Error Handling.
-Expanded error codes for sign-related issues.
+Expanded error codes for complex operations.
 
 @d TritError int
 @d TRIT_OK 0
@@ -40,14 +42,14 @@ const char* trit_error_str(TritError err) {
         case TRIT_ERR_DIV_ZERO: return "Division by zero";
         case TRIT_ERR_OVERFLOW: return "Overflow or value too large";
         case TRIT_ERR_UNDEFINED: return "Operation undefined";
-        case TRIT_ERR_NEGATIVE: return "Negative input not supported";
+        case TRIT_ERR_NEGATIVE: return "Negative input handled as complex";
         case TRIT_ERR_PRECISION: return "Precision limit exceeded";
         default: return "Unknown error";
     }
 }
 
 @*1 Data Structures and Constants.
-Added sign fields to support negative numbers.
+Includes `TritComplex` for complex numbers.
 
 @d TRIT_MAX 3
 typedef int Trit;
@@ -64,17 +66,22 @@ typedef struct {
     int f_len;           /* Length of fractional part */
 } TritFloat;
 typedef struct {
+    TritFloat real;      /* Real part */
+    TritFloat imag;      /* Imaginary part */
+} TritComplex;
+typedef struct {
     TritFloat quotient;  /* Division result */
     TritFloat remainder; /* Division remainder */
 } TritDivResult;
 
 @*1 Helper Functions.
-Updated to handle signs.
+Updated for optimization and complex support.
 
 @<Conversion Functions@>
 @<Arithmetic Helpers@>
 @<Big Integer Helpers@>
 @<Float Helpers@>
+@<Complex Helpers@>
 
 @<Conversion Functions@>=
 TritError trits_to_binary(Trit* trits, int len, unsigned long* result) {
@@ -131,7 +138,7 @@ TritError tritbig_from_trits(Trit* trits, int len, int sign, TritBigInt** bi) {
     }
     memcpy((*bi)->digits, trits, len * sizeof(Trit));
     (*bi)->len = len;
-    (*bi)->sign = sign; /* Set sign (0 or 1) */
+    (*bi)->sign = sign;
     return TRIT_OK;
 }
 
@@ -151,7 +158,7 @@ TritError tritfloat_from_bigint(TritBigInt* bi, TritFloat* tf) {
     tf->i_len = bi->len;
     tf->fraction = NULL;
     tf->f_len = 0;
-    tf->sign = bi->sign; /* Inherit sign */
+    tf->sign = bi->sign;
     return TRIT_OK;
 }
 
@@ -160,8 +167,30 @@ void tritfloat_free(TritFloat tf) {
     if (tf.f_len > 0) free(tf.fraction);
 }
 
+@<Complex Helpers@>=
+TritError tritcomplex_from_float(TritFloat real, TritFloat imag, TritComplex* tc) {
+    tc->real = real;
+    tc->imag = imag;
+    return TRIT_OK;
+}
+
+TritError tritcomplex_from_bigint(TritBigInt* real_bi, TritBigInt* imag_bi, TritComplex* tc) {
+    TritError err;
+    if ((err = tritfloat_from_bigint(real_bi, &tc->real)) != TRIT_OK) return err;
+    if ((err = tritfloat_from_bigint(imag_bi, &tc->imag)) != TRIT_OK) {
+        tritfloat_free(tc->real);
+        return err;
+    }
+    return TRIT_OK;
+}
+
+void tritcomplex_free(TritComplex tc) {
+    tritfloat_free(tc.real);
+    tritfloat_free(tc.imag);
+}
+
 @*1 Core Arithmetic Operations.
-Updated to handle signs and fractions.
+Optimized division with sign handling.
 
 @c
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
@@ -171,8 +200,7 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
     if (!temp) return TRIT_ERR_MEM;
     int carry = 0, pos = 0;
 
-    /* Handle sign combinations */
-    if (a->sign == b->sign) { /* Same sign: direct addition */
+    if (a->sign == b->sign) {
         for (int i = max_len - 1; i >= 0; i--) {
             Trit a_trit = (i < a->len) ? a->digits[i] : 0;
             Trit b_trit = (i < b->len) ? b->digits[i] : 0;
@@ -187,7 +215,7 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
         TritError err = tritbig_from_trits(temp, result_len, a->sign, result);
         free(temp);
         return err;
-    } else { /* Different signs: subtract larger magnitude */
+    } else {
         TritBigInt* larger = (a->len > b->len || (a->len == b->len && memcmp(a->digits, b->digits, a->len * sizeof(Trit)) >= 0)) ? a : b;
         TritBigInt* smaller = (larger == a) ? b : a;
         int sign = larger->sign;
@@ -210,7 +238,6 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
 
 TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
     if (!a || !b) return TRIT_ERR_INPUT;
-    /* Flip b's sign and use addition */
     TritBigInt* b_neg = (TritBigInt*)malloc(sizeof(TritBigInt));
     if (!b_neg) return TRIT_ERR_MEM;
     b_neg->digits = (Trit*)malloc(b->len * sizeof(Trit));
@@ -220,7 +247,7 @@ TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result)
     }
     memcpy(b_neg->digits, b->digits, b->len * sizeof(Trit));
     b_neg->len = b->len;
-    b_neg->sign = !b->sign; /* Negate b */
+    b_neg->sign = !b->sign;
     TritError err = tritjs_add_big(a, b_neg, result);
     tritbig_free(b_neg);
     return err;
@@ -253,7 +280,7 @@ TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result)
     }
     int start = 0;
     while (start < max_len - 1 && temp[start] == 0) start++;
-    int sign = (a->sign == b->sign) ? 0 : 1; /* Same signs = positive, different = negative */
+    int sign = (a->sign == b->sign) ? 0 : 1;
     TritError err = tritbig_from_trits(temp + start, max_len - start, sign, result);
     free(temp);
     return err;
@@ -263,7 +290,7 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
     if (!a || !b) return TRIT_ERR_INPUT;
     if (precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
 
-    /* Check if divisor is zero */
+    /* Check divisor zero */
     int b_is_zero = 1;
     for (int i = 0; i < b->len; i++) {
         if (b->digits[i] != 0) {
@@ -276,20 +303,20 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
     /* Convert inputs to TritFloat */
     TritFloat dividend, divisor;
     TritError err;
-    if ((err = tritfloat_from_bigint(a, &dividend)) != TRIT_OK) return err;
+    if ((err = tritfloat_from_bigint(a, ÷nd)) != TRIT_OK) return err;
     if ((err = tritfloat_from_bigint(b, &divisor)) != TRIT_OK) {
         tritfloat_free(dividend);
         return err;
     }
 
     /* Allocate quotient and remainder */
-    result->quotient.integer = (Trit*)malloc(a->len * sizeof(Trit));
+    result->quotient.integer = (Trit*)calloc(a->len, sizeof(Trit));
     if (!result->quotient.integer) {
         tritfloat_free(dividend);
         tritfloat_free(divisor);
         return TRIT_ERR_MEM;
     }
-    result->quotient.fraction = (Trit*)malloc(precision * sizeof(Trit));
+    result->quotient.fraction = (Trit*)calloc(precision, sizeof(Trit));
     if (!result->quotient.fraction) {
         free(result->quotient.integer);
         tritfloat_free(dividend);
@@ -309,59 +336,95 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
     result->quotient.f_len = precision;
     result->remainder.i_len = b->len;
     result->remainder.f_len = 0;
-    result->quotient.sign = (a->sign == b->sign) ? 0 : 1; /* Sign rule */
-    result->remainder.sign = a->sign; /* Remainder keeps dividend's sign */
+    result->quotient.sign = (a->sign == b->sign) ? 0 : 1;
+    result->remainder.sign = a->sign;
 
-    /* Initialize quotient and remainder */
-    memset(result->quotient.integer, 0, a->len * sizeof(Trit));
-    memset(result->quotient.fraction, 0, precision * sizeof(Trit));
+    /* Precompute divisor multiples */
+    TritBigInt* b_one = NULL;
+    TritBigInt* b_two = NULL;
+    if ((err = tritbig_from_trits(b->digits, b->len, 0, &b_one)) != TRIT_OK) {
+        tritfloat_free(result->quotient);
+        tritfloat_free(result->remainder);
+        tritfloat_free(dividend);
+        tritfloat_free(divisor);
+        return err;
+    }
+    TritBigInt* two;
+    if ((err = tritbig_from_trits((Trit[]){2}, 1, 0, &two)) != TRIT_OK) {
+        tritbig_free(b_one);
+        tritfloat_free(result->quotient);
+        tritfloat_free(result->remainder);
+        tritfloat_free(dividend);
+        tritfloat_free(divisor);
+        return err;
+    }
+    if ((err = tritjs_multiply_big(b_one, two, &b_two)) != TRIT_OK) {
+        tritbig_free(b_one);
+        tritbig_free(two);
+        tritfloat_free(result->quotient);
+        tritfloat_free(result->remainder);
+        tritfloat_free(dividend);
+        tritfloat_free(divisor);
+        return err;
+    }
+    tritbig_free(two);
+
+    /* Initialize remainder */
     memcpy(result->remainder.integer, a->digits, a->len * sizeof(Trit));
+    TritBigInt* temp_rem;
+    if ((err = tritbig_from_trits(result->remainder.integer, result->remainder.i_len, result->remainder.sign, &temp_rem)) != TRIT_OK) {
+        tritbig_free(b_one);
+        tritbig_free(b_two);
+        tritfloat_free(result->quotient);
+        tritfloat_free(result->remainder);
+        tritfloat_free(dividend);
+        tritfloat_free(divisor);
+        return err;
+    }
 
-    /* Integer division */
+    /* Integer division with binary search */
     for (int i = 0; i < a->len; i++) {
-        int digit = 0;
-        TritBigInt* temp_rem;
-        if ((err = tritbig_from_trits(result->remainder.integer, result->remainder.i_len, result->remainder.sign, &temp_rem)) != TRIT_OK) {
-            tritfloat_free(result->quotient);
-            tritfloat_free(result->remainder);
-            tritfloat_free(dividend);
-            tritfloat_free(divisor);
-            return err;
-        }
-        while (1) {
-            TritBigInt* temp_sub;
-            if ((err = tritjs_subtract_big(temp_rem, b, &temp_sub)) != TRIT_OK) {
-                if (err == TRIT_ERR_NEGATIVE) break;
-                tritbig_free(temp_rem);
-                tritfloat_free(result->quotient);
-                tritfloat_free(result->remainder);
-                tritfloat_free(dividend);
-                tritfloat_free(divisor);
-                return err;
+        int low = 0, high = 2, digit = 0;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            TritBigInt* multiple = (mid == 1) ? b_one : (mid == 2) ? b_two : NULL;
+            if (mid == 0) {
+                digit = 0;
+                break;
             }
-            tritbig_free(temp_rem);
-            temp_rem = temp_sub;
-            digit++;
+            TritBigInt* temp_sub;
+            if ((err = tritjs_subtract_big(temp_rem, multiple, &temp_sub)) != TRIT_OK) {
+                if (err == TRIT_ERR_NEGATIVE) {
+                    high = mid - 1;
+                } else {
+                    tritbig_free(temp_rem);
+                    tritbig_free(b_one);
+                    tritbig_free(b_two);
+                    tritfloat_free(result->quotient);
+                    tritfloat_free(result->remainder);
+                    tritfloat_free(dividend);
+                    tritfloat_free(divisor);
+                    return err;
+                }
+            } else {
+                digit = mid;
+                low = mid + 1;
+                tritbig_free(temp_rem);
+                temp_rem = temp_sub;
+            }
         }
         result->quotient.integer[i] = digit;
         memcpy(result->remainder.integer, temp_rem->digits, temp_rem->len * sizeof(Trit));
         result->remainder.i_len = temp_rem->len;
-        tritbig_free(temp_rem);
     }
 
     /* Fractional division */
     for (int i = 0; i < precision; i++) {
-        TritBigInt* temp_rem;
-        if ((err = tritbig_from_trits(result->remainder.integer, result->remainder.i_len, result->remainder.sign, &temp_rem)) != TRIT_OK) {
-            tritfloat_free(result->quotient);
-            tritfloat_free(result->remainder);
-            tritfloat_free(dividend);
-            tritfloat_free(divisor);
-            return err;
-        }
         TritBigInt* three;
         if ((err = tritbig_from_trits((Trit[]){1}, 1, 0, &three)) != TRIT_OK) {
             tritbig_free(temp_rem);
+            tritbig_free(b_one);
+            tritbig_free(b_two);
             tritfloat_free(result->quotient);
             tritfloat_free(result->remainder);
             tritfloat_free(dividend);
@@ -372,6 +435,8 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
         if ((err = tritjs_multiply_big(temp_rem, three, &temp_mul)) != TRIT_OK) {
             tritbig_free(temp_rem);
             tritbig_free(three);
+            tritbig_free(b_one);
+            tritbig_free(b_two);
             tritfloat_free(result->quotient);
             tritfloat_free(result->remainder);
             tritfloat_free(dividend);
@@ -382,34 +447,48 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
         tritbig_free(three);
         temp_rem = temp_mul;
 
-        int digit = 0;
-        while (1) {
-            TritBigInt* temp_sub;
-            if ((err = tritjs_subtract_big(temp_rem, b, &temp_sub)) != TRIT_OK) {
-                if (err == TRIT_ERR_NEGATIVE) break;
-                tritbig_free(temp_rem);
-                tritfloat_free(result->quotient);
-                tritfloat_free(result->remainder);
-                tritfloat_free(dividend);
-                tritfloat_free(divisor);
-                return err;
+        int low = 0, high = 2, digit = 0;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            TritBigInt* multiple = (mid == 1) ? b_one : (mid == 2) ? b_two : NULL;
+            if (mid == 0) {
+                digit = 0;
+                break;
             }
-            tritbig_free(temp_rem);
-            temp_rem = temp_sub;
-            digit++;
+            TritBigInt* temp_sub;
+            if ((err = tritjs_subtract_big(temp_rem, multiple, &temp_sub)) != TRIT_OK) {
+                if (err == TRIT_ERR_NEGATIVE) {
+                    high = mid - 1;
+                } else {
+                    tritbig_free(temp_rem);
+                    tritbig_free(b_one);
+                    tritbig_free(b_two);
+                    tritfloat_free(result->quotient);
+                    tritfloat_free(result->remainder);
+                    tritfloat_free(dividend);
+                    tritfloat_free(divisor);
+                    return err;
+                }
+            } else {
+                digit = mid;
+                low = mid + 1;
+                tritbig_free(temp_rem);
+                temp_rem = temp_sub;
+            }
         }
         result->quotient.fraction[i] = digit;
         memcpy(result->remainder.integer, temp_rem->digits, temp_rem->len * sizeof(Trit));
         result->remainder.i_len = temp_rem->len;
-        tritbig_free(temp_rem);
     }
 
-    /* Trim leading zeros in quotient */
     int int_start = 0;
     while (int_start < result->quotient.i_len - 1 && result->quotient.integer[int_start] == 0) int_start++;
     if (int_start > 0) {
         Trit* new_int = (Trit*)malloc((result->quotient.i_len - int_start) * sizeof(Trit));
         if (!new_int) {
+            tritbig_free(temp_rem);
+            tritbig_free(b_one);
+            tritbig_free(b_two);
             tritfloat_free(result->quotient);
             tritfloat_free(result->remainder);
             tritfloat_free(dividend);
@@ -422,17 +501,21 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
         result->quotient.i_len -= int_start;
     }
 
+    tritbig_free(temp_rem);
+    tritbig_free(b_one);
+    tritbig_free(b_two);
     tritfloat_free(dividend);
     tritfloat_free(divisor);
     return TRIT_OK;
 }
 
 @*1 Scientific Operations.
-Updated to handle signs.
+Added complex logarithm support.
 
 @c
 TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** result) {
     if (!base || !exp) return TRIT_ERR_INPUT;
+    if (exp->sign) return TRIT_ERR_NEGATIVE;
     TritError err;
     if ((err = tritbig_from_trits((Trit[]){1}, 1, 0, result)) != TRIT_OK) return err;
     unsigned long exp_bin;
@@ -444,7 +527,7 @@ TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** resul
         tritbig_free(*result);
         return TRIT_ERR_OVERFLOW;
     }
-    int sign = (base->sign && (exp_bin % 2 == 1)) ? 1 : 0; /* Negative base, odd exp = negative */
+    int sign = (base->sign && (exp_bin % 2 == 1)) ? 1 : 0;
     for (unsigned long i = 0; i < exp_bin; i++) {
         TritBigInt* temp;
         if ((err = tritjs_multiply_big(*result, base, &temp)) != TRIT_OK) {
@@ -458,63 +541,121 @@ TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** resul
     return TRIT_OK;
 }
 
-TritError tritjs_sqrt_float(TritBigInt* a, int precision, TritFloat* result) {
+TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
-    if (a->sign) return TRIT_ERR_NEGATIVE; /* No complex numbers yet */
     unsigned long a_bin;
     TritError err;
     if ((err = trits_to_binary(a->digits, a->len, &a_bin)) != TRIT_OK) return err;
-    if (a_bin == 0) {
-        result->integer = (Trit*)malloc(1 * sizeof(Trit));
-        if (!result->integer) return TRIT_ERR_MEM;
-        result->integer[0] = 0;
-        result->i_len = 1;
-        result->fraction = (Trit*)malloc(precision * sizeof(Trit));
-        if (!result->fraction) {
-            free(result->integer);
+    double a_val = (double)a_bin * (a->sign ? -1 : 1);
+    if (a_val >= 0) {
+        double sqrt_val = sqrt(a_val);
+        unsigned long int_part = (unsigned long)sqrt_val;
+        double frac_part = sqrt_val - int_part;
+        if ((err = binary_to_trits(int_part, (a->len + 1) / 2, &result->real.integer)) != TRIT_OK) return err;
+        if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->real.fraction)) != TRIT_OK) {
+            free(result->real.integer);
+            return err;
+        }
+        result->real.i_len = (a->len + 1) / 2;
+        result->real.f_len = precision;
+        result->real.sign = 0;
+        result->imag.integer = (Trit*)malloc(1 * sizeof(Trit));
+        if (!result->imag.integer) {
+            tritfloat_free(result->real);
             return TRIT_ERR_MEM;
         }
-        memset(result->fraction, 0, precision * sizeof(Trit));
-        result->f_len = precision;
-        result->sign = 0;
-        return TRIT_OK;
+        result->imag.integer[0] = 0;
+        result->imag.i_len = 1;
+        result->imag.fraction = (Trit*)malloc(precision * sizeof(Trit));
+        if (!result->imag.fraction) {
+            free(result->imag.integer);
+            tritfloat_free(result->real);
+            return TRIT_ERR_MEM;
+        }
+        memset(result->imag.fraction, 0, precision * sizeof(Trit));
+        result->imag.f_len = precision;
+        result->imag.sign = 0;
+    } else {
+        double sqrt_val = sqrt(-a_val);
+        unsigned long int_part = (unsigned long)sqrt_val;
+        double frac_part = sqrt_val - int_part;
+        result->real.integer = (Trit*)malloc(1 * sizeof(Trit));
+        if (!result->real.integer) return TRIT_ERR_MEM;
+        result->real.integer[0] = 0;
+        result->real.i_len = 1;
+        result->real.fraction = (Trit*)malloc(precision * sizeof(Trit));
+        if (!result->real.fraction) {
+            free(result->real.integer);
+            return TRIT_ERR_MEM;
+        }
+        memset(result->real.fraction, 0, precision * sizeof(Trit));
+        result->real.f_len = precision;
+        result->real.sign = 0;
+        if ((err = binary_to_trits(int_part, (a->len + 1) / 2, &result->imag.integer)) != TRIT_OK) {
+            tritfloat_free(result->real);
+            return err;
+        }
+        if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->imag.fraction)) != TRIT_OK) {
+            free(result->imag.integer);
+            tritfloat_free(result->real);
+            return err;
+        }
+        result->imag.i_len = (a->len + 1) / 2;
+        result->imag.f_len = precision;
+        result->imag.sign = 0;
     }
-    double sqrt_val = sqrt((double)a_bin);
-    unsigned long int_part = (unsigned long)sqrt_val;
-    double frac_part = sqrt_val - int_part;
-    if ((err = binary_to_trits(int_part, (a->len + 1) / 2, &result->integer)) != TRIT_OK) return err;
-    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->fraction)) != TRIT_OK) {
-        free(result->integer);
-        return err;
-    }
-    result->i_len = (a->len + 1) / 2;
-    result->f_len = precision;
-    result->sign = 0; /* Sqrt is always non-negative */
     return TRIT_OK;
 }
 
-TritError tritjs_log3_float(TritBigInt* a, int precision, TritFloat* result) {
+TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
-    if (a->sign) return TRIT_ERR_NEGATIVE; /* Log of negative undefined */
     unsigned long a_bin;
     TritError err;
     if ((err = trits_to_binary(a->digits, a->len, &a_bin)) != TRIT_OK) return err;
-    if (a_bin <= 0) return TRIT_ERR_UNDEFINED;
-    double log_val = log((double)a_bin) / log(3.0);
-    unsigned long int_part = (unsigned long)log_val;
-    double frac_part = log_val - int_part;
-    if ((err = binary_to_trits(int_part, a->len, &result->integer)) != TRIT_OK) return err;
-    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->fraction)) != TRIT_OK) {
-        free(result->integer);
+    double a_real = (double)a_bin * (a->sign ? -1 : 1);
+    double a_imag = 0; /* Assume imaginary part is 0 for simplicity */
+    double magnitude = sqrt(a_real * a_real + a_imag * a_imag);
+    double arg = atan2(a_imag, a_real);
+    double ln3 = log(3.0);
+
+    /* Real part: log3(|z|) */
+    double real_val = log(magnitude) / ln3;
+    int real_sign = (real_val < 0) ? 1 : 0;
+    double real_abs = fabs(real_val);
+    unsigned long real_int = (unsigned long)real_abs;
+    double real_frac = real_abs - real_int;
+    if ((err = binary_to_trits(real_int, a->len, &result->real.integer)) != TRIT_OK) return err;
+    if ((err = binary_to_trits((unsigned long)(real_frac * pow(3, precision)), precision, &result->real.fraction)) != TRIT_OK) {
+        free(result->real.integer);
         return err;
     }
-    result->i_len = a->len;
-    result->f_len = precision;
-    result->sign = 0; /* Log is positive for positive input */
+    result->real.i_len = a->len;
+    result->real.f_len = precision;
+    result->real.sign = real_sign;
+
+    /* Imaginary part: arg(z) / ln(3) */
+    double imag_val = arg / ln3;
+    int imag_sign = (imag_val < 0) ? 1 : 0;
+    double imag_abs = fabs(imag_val);
+    unsigned long imag_int = (unsigned long)imag_abs;
+    double imag_frac = imag_abs - imag_int;
+    if ((err = binary_to_trits(imag_int, a->len, &result->imag.integer)) != TRIT_OK) {
+        tritfloat_free(result->real);
+        return err;
+    }
+    if ((err = binary_to_trits((unsigned long)(imag_frac * pow(3, precision)), precision, &result->imag.fraction)) != TRIT_OK) {
+        free(result->imag.integer);
+        tritfloat_free(result->real);
+        return err;
+    }
+    result->imag.i_len = a->len;
+    result->imag.f_len = precision;
+    result->imag.sign = imag_sign;
+
     return TRIT_OK;
 }
 
-TritError tritjs_sin_float(TritBigInt* a, int precision, TritFloat* result) {
+TritError tritjs_sin_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
     unsigned long a_bin;
     TritError err;
@@ -527,29 +668,47 @@ TritError tritjs_sin_float(TritBigInt* a, int precision, TritFloat* result) {
         free(pi);
         return err;
     }
-    double a_rad = (double)a_bin * M_PI / (double)pi_bin * (a->sign ? -1 : 1); /* Apply sign */
+    double a_rad = (double)a_bin * M_PI / (double)pi_bin * (a->sign ? -1 : 1);
     double sin_val = sin(a_rad);
     int sign = (sin_val < 0) ? 1 : 0;
     double abs_val = fabs(sin_val);
     unsigned long int_part = (unsigned long)abs_val;
     double frac_part = abs_val - int_part;
-    if ((err = binary_to_trits(int_part, 1, &result->integer)) != TRIT_OK) {
+    if ((err = binary_to_trits(int_part, 1, &result->real.integer)) != TRIT_OK) {
         free(pi);
         return err;
     }
-    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->fraction)) != TRIT_OK) {
-        free(result->integer);
+    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->real.fraction)) != TRIT_OK) {
+        free(result->real.integer);
         free(pi);
         return err;
     }
-    result->i_len = 1;
-    result->f_len = precision;
-    result->sign = sign;
+    result->real.i_len = 1;
+    result->real.f_len = precision;
+    result->real.sign = sign;
+    result->imag.integer = (Trit*)malloc(1 * sizeof(Trit));
+    if (!result->imag.integer) {
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    result->imag.integer[0] = 0;
+    result->imag.i_len = 1;
+    result->imag.fraction = (Trit*)malloc(precision * sizeof(Trit));
+    if (!result->imag.fraction) {
+        free(result->imag.integer);
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    memset(result->imag.fraction, 0, precision * sizeof(Trit));
+    result->imag.f_len = precision;
+    result->imag.sign = 0;
     free(pi);
     return TRIT_OK;
 }
 
-TritError tritjs_cos_float(TritBigInt* a, int precision, TritFloat* result) {
+TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
     unsigned long a_bin;
     TritError err;
@@ -568,23 +727,41 @@ TritError tritjs_cos_float(TritBigInt* a, int precision, TritFloat* result) {
     double abs_val = fabs(cos_val);
     unsigned long int_part = (unsigned long)abs_val;
     double frac_part = abs_val - int_part;
-    if ((err = binary_to_trits(int_part, 1, &result->integer)) != TRIT_OK) {
+    if ((err = binary_to_trits(int_part, 1, &result->real.integer)) != TRIT_OK) {
         free(pi);
         return err;
     }
-    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->fraction)) != TRIT_OK) {
-        free(result->integer);
+    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->real.fraction)) != TRIT_OK) {
+        free(result->real.integer);
         free(pi);
         return err;
     }
-    result->i_len = 1;
-    result->f_len = precision;
-    result->sign = sign;
+    result->real.i_len = 1;
+    result->real.f_len = precision;
+    result->real.sign = sign;
+    result->imag.integer = (Trit*)malloc(1 * sizeof(Trit));
+    if (!result->imag.integer) {
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    result->imag.integer[0] = 0;
+    result->imag.i_len = 1;
+    result->imag.fraction = (Trit*)malloc(precision * sizeof(Trit));
+    if (!result->imag.fraction) {
+        free(result->imag.integer);
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    memset(result->imag.fraction, 0, precision * sizeof(Trit));
+    result->imag.f_len = precision;
+    result->imag.sign = 0;
     free(pi);
     return TRIT_OK;
 }
 
-TritError tritjs_tan_float(TritBigInt* a, int precision, TritFloat* result) {
+TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
     unsigned long a_bin;
     TritError err;
@@ -607,25 +784,43 @@ TritError tritjs_tan_float(TritBigInt* a, int precision, TritFloat* result) {
     double abs_val = fabs(tan_val);
     unsigned long int_part = (unsigned long)abs_val;
     double frac_part = abs_val - int_part;
-    if ((err = binary_to_trits(int_part, (int)log(abs_val)/log(3) + 1, &result->integer)) != TRIT_OK) {
+    if ((err = binary_to_trits(int_part, (int)log(abs_val)/log(3) + 1, &result->real.integer)) != TRIT_OK) {
         free(pi);
         return err;
     }
-    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->fraction)) != TRIT_OK) {
-        free(result->integer);
+    if ((err = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision, &result->real.fraction)) != TRIT_OK) {
+        free(result->real.integer);
         free(pi);
         return err;
     }
-    result->i_len = (int)log(abs_val)/log(3) + 1;
-    result->f_len = precision;
-    result->sign = sign;
+    result->real.i_len = (int)log(abs_val)/log(3) + 1;
+    result->real.f_len = precision;
+    result->real.sign = sign;
+    result->imag.integer = (Trit*)malloc(1 * sizeof(Trit));
+    if (!result->imag.integer) {
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    result->imag.integer[0] = 0;
+    result->imag.i_len = 1;
+    result->imag.fraction = (Trit*)malloc(precision * sizeof(Trit));
+    if (!result->imag.fraction) {
+        free(result->imag.integer);
+        tritfloat_free(result->real);
+        free(pi);
+        return TRIT_ERR_MEM;
+    }
+    memset(result->imag.fraction, 0, precision * sizeof(Trit));
+    result->imag.f_len = precision;
+    result->imag.sign = 0;
     free(pi);
     return TRIT_OK;
 }
 
 TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result) {
     if (!a) return TRIT_ERR_INPUT;
-    if (a->sign) return TRIT_ERR_NEGATIVE; /* Factorial of negative undefined */
+    if (a->sign) return TRIT_ERR_NEGATIVE;
     unsigned long a_bin;
     TritError err;
     if ((err = trits_to_binary(a->digits, a->len, &a_bin)) != TRIT_OK) return err;
@@ -667,7 +862,7 @@ TritError tritjs_pi(int* len, Trit** pi) {
 }
 
 @*1 Utility Functions.
-Updated for sign handling.
+Updated for complex numbers.
 
 @c
 TritError tritjs_to_string(Trit* trits, int len, char** str) {
@@ -711,8 +906,35 @@ TritError tritfloat_to_string(TritFloat tf, char** str) {
     return TRIT_OK;
 }
 
+TritError tritcomplex_to_string(TritComplex tc, char** str) {
+    char* real_str;
+    char* imag_str;
+    TritError err;
+    if ((err = tritfloat_to_string(tc.real, &real_str)) != TRIT_OK) return err;
+    if ((err = tritfloat_to_string(tc.imag, &imag_str)) != TRIT_OK) {
+        free(real_str);
+        return err;
+    }
+    int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
+    if (imag_zero) {
+        *str = real_str;
+        free(imag_str);
+        return TRIT_OK;
+    }
+    *str = (char*)malloc(strlen(real_str) + strlen(imag_str) + 4);
+    if (!*str) {
+        free(real_str);
+        free(imag_str);
+        return TRIT_ERR_MEM;
+    }
+    sprintf(*str, "%s %si", real_str, imag_str);
+    free(real_str);
+    free(imag_str);
+    return TRIT_OK;
+}
+
 @*1 CLI Functions.
-Updated CLI with sign support and new operations.
+Updated with optimized division and complex log.
 
 @c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
@@ -844,74 +1066,74 @@ void run_calculator() {
                 tritbig_free(result);
             }
         } else if (strcmp(op, "sqrt") == 0) {
-            TritFloat result;
-            if ((err = tritjs_sqrt_float(a, 3, &result)) != TRIT_OK) {
+            TritComplex result;
+            if ((err = tritjs_sqrt_complex(a, 3, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
-                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                if ((err = tritcomplex_to_string(result, &str)) != TRIT_OK) {
                     printf("Error: %s\n", trit_error_str(err));
                 } else {
                     printf("%s\n", str);
                     free(str);
                 }
-                tritfloat_free(result);
+                tritcomplex_free(result);
             }
         } else if (strcmp(op, "log3") == 0) {
-            TritFloat result;
-            if ((err = tritjs_log3_float(a, 3, &result)) != TRIT_OK) {
+            TritComplex result;
+            if ((err = tritjs_log3_complex(a, 3, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
-                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                if ((err = tritcomplex_to_string(result, &str)) != TRIT_OK) {
                     printf("Error: %s\n", trit_error_str(err));
                 } else {
                     printf("%s\n", str);
                     free(str);
                 }
-                tritfloat_free(result);
+                tritcomplex_free(result);
             }
         } else if (strcmp(op, "sin") == 0) {
-            TritFloat result;
-            if ((err = tritjs_sin_float(a, 3, &result)) != TRIT_OK) {
+            TritComplex result;
+            if ((err = tritjs_sin_complex(a, 3, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
-                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                if ((err = tritcomplex_to_string(result, &str)) != TRIT_OK) {
                     printf("Error: %s\n", trit_error_str(err));
                 } else {
                     printf("%s\n", str);
                     free(str);
                 }
-                tritfloat_free(result);
+                tritcomplex_free(result);
             }
         } else if (strcmp(op, "cos") == 0) {
-            TritFloat result;
-            if ((err = tritjs_cos_float(a, 3, &result)) != TRIT_OK) {
+            TritComplex result;
+            if ((err = tritjs_cos_complex(a, 3, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
-                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                if ((err = tritcomplex_to_string(result, &str)) != TRIT_OK) {
                     printf("Error: %s\n", trit_error_str(err));
                 } else {
                     printf("%s\n", str);
                     free(str);
                 }
-                tritfloat_free(result);
+                tritcomplex_free(result);
             }
         } else if (strcmp(op, "tan") == 0) {
-            TritFloat result;
-            if ((err = tritjs_tan_float(a, 3, &result)) != TRIT_OK) {
+            TritComplex result;
+            if ((err = tritjs_tan_complex(a, 3, &result)) != TRIT_OK) {
                 printf("Error: %s\n", trit_error_str(err));
             } else {
                 char* str;
-                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                if ((err = tritcomplex_to_string(result, &str)) != TRIT_OK) {
                     printf("Error: %s\n", trit_error_str(err));
                 } else {
                     printf("%s\n", str);
                     free(str);
                 }
-                tritfloat_free(result);
+                tritcomplex_free(result);
             }
         } else if (strcmp(op, "fact") == 0) {
             TritBigInt* result;
