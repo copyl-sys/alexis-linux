@@ -19,10 +19,10 @@ It’s built on an open-source large language model (think LLaMA or a descendant
 1. Intelligent Dependency Resolution
    a) Preemptive Conflict Detection - Instead of waiting for dependency errors, Axion simulates installations and predicts breakages in advance. 
    b) AI-Based Alternative Suggestions - If a dependency conflict arises, Axion offers alternative package versions or compatiable forks.
-   c) Source vs. Binary Awareness - Users can toggle beteen source builds and precompiled binaries dynamically bassed on system performance.
+   c) Source vs. Binary Awareness - Users can toggle between source builds and precompiled binaries dynamically based on system performance.
 
 2. AI-Guided Updates & Security Patching
-   a) Automated Patch Analysis - Axion scans upstream pacakge changes and categorizes updates as:
+   a) Automated Patch Analysis - Axion scans upstream package changes and categorizes updates as:
      🛡️ Security-critical
      ⚡ Performance-enhancing
      ⚠️ Potentially breaking
