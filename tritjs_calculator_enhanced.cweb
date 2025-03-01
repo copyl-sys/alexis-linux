@@ -64,6 +64,8 @@ TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result)
 TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision) {
     /* Existing checks and setup */
+    TritError err;
+    if (!a || !b) return TRIT_ERR_INPUT;
     TritBigInt* temp_rem = NULL;
     if ((err = tritbig_from_trits(a->digits, a->len, a->sign, &temp_rem)) != TRIT_OK) goto cleanup;
 
@@ -116,8 +118,6 @@ TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result)
     }
     /* Positive case unchanged */
 }
-
-/* Need to identify missing /
 
 @*2 Error Handling.
 Enhanced with memory mapping errors and audit logging.
