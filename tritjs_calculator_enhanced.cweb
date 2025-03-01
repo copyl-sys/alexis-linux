@@ -1,5 +1,17 @@
-@* TritJS: Enhanced Ternary Calculator with Sign Handling.
-This version includes sign handling for negative numbers, inspired by AI systems, using a sign-magnitude approach.
+@* TritJS: Enhanced Ternary Scientific Calculator with Advanced Features.
+This document defines \.{TritJS}, a library for ternary (base-3) arithmetic and scientific operations,
+adapted from a JavaScript module into C. It supports basic arithmetic (addition, subtraction, multiplication,
+division), scientific functions (exponentiation, square roots, base-3 logarithms, sine, cosine, tangent,
+factorials), and constants like π, all operating on trit arrays (digits in $\{0, 1, 2\}$). Key enhancements
+include:
+
+- Sign handling for negative numbers, inspired by AI systems, using a sign-magnitude approach.
+- Fractional support via `TritFloat` for precise results (e.g., sin(12₃) ≈ 0.221₃).
+- Arbitrary-precision arithmetic via `TritBigInt` to handle large numbers.
+- Accurate trigonometric scaling using a ternary π constant.
+- Native fractional division in `tritjs_divide_big` using `TritFloat`.
+- An interactive CLI with add, sub, mul, div, pow, sqrt, log3, sin, cos, tan, fact, and pi.
+- Refined error handling with detailed error codes and consistent cleanup.
 
 @c
 #include <stdio.h>
