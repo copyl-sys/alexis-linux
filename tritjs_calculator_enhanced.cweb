@@ -961,6 +961,7 @@ TritError parse_trit_string(const char* str, TritBigInt** bi) {
 typedef struct {
     const char* command;
     const char* description;
+    const char* example;
 } TritHelpEntry;
 
 typedef struct {
