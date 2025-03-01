@@ -956,6 +956,40 @@ TritError parse_trit_string(const char* str, TritBigInt** bi) {
     return err;
 }
 
+@d MAX_HELP_ENTRIES 15
+
+typedef struct {
+    const char* command;
+    const char* description;
+} TritHelpEntry;
+
+TritHelpEntry help_entries[MAX_HELP_ENTRIES] = {
+    {"add", "Adds two ternary numbers or complex numbers."},
+    {"sub", "Subtracts the second number from the first."},
+    {"mul", "Multiplies two numbers in base-3."},
+    {"div", "Divides two numbers, showing quotient and remainder."},
+    {"pow", "Raises a number to a ternary exponent."},
+    {"sqrt", "Computes the square root (supports complex numbers)."},
+    {"log3", "Computes the base-3 logarithm (supports complex)."},
+    {"sin", "Computes the sine function."},
+    {"cos", "Computes the cosine function."},
+    {"tan", "Computes the tangent function."},
+    {"fact", "Computes the factorial of a number."},
+    {"pi", "Displays the value of π in base-3."},
+    {"help", "Displays this help message."},
+    {"quit", "Exits the calculator."},
+    {NULL, NULL} // Marks the end of the list
+};
+
+void print_help() {
+    printf("\nTritJS Help Documentation:\n");
+    printf("-------------------------\n");
+    for (int i = 0; help_entries[i].command != NULL; i++) {
+        printf("  %-6s - %s\n", help_entries[i].command, help_entries[i].description);
+    }
+    printf("-------------------------\n\n");
+}
+
 void run_calculator() {
     char input[256];
     printf("TritJS Ternary Calculator (enter 'quit' to exit)\n");
@@ -965,7 +999,10 @@ void run_calculator() {
         if (!fgets(input, 256, stdin)) break;
         input[strcspn(input, "\n")] = 0;
         if (strcmp(input, "quit") == 0) break;
-
+        if (strcmp(input, "help") == 0) {
+            print_help();
+            continue;
+        }
         char op[10], arg1[20], arg2[20] = "";
         int parsed = sscanf(input, "%9s %19s %19s", op, arg1, arg2);
         if (parsed < 2) {
