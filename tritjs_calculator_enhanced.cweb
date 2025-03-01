@@ -53,6 +53,38 @@ Inputs are base-3 (trits: 0, 1, 2). Save/load uses \.{.trit} files.
 #define MAX_SCRIPT_CMDS 50
 #define MAX_FILENAME 256
 
+/* Data Structures (Moved Up) */
+typedef int Trit;
+typedef struct {
+    int sign;
+    Trit* digits;
+    int len;
+    int is_mapped;
+    int fd;
+    char tmp_path[32];
+} TritBigInt;
+
+typedef struct {
+    int sign;
+    Trit* integer;
+    Trit* fraction;
+    int i_len, f_len;
+    int i_mapped, f_mapped;
+    int i_fd, f_fd;
+    char i_tmp_path[32];
+    char f_tmp_path[32];
+} TritFloat;
+
+typedef struct {
+    TritFloat real;
+    TritFloat imag;
+} TritComplex;
+
+typedef struct {
+    TritFloat quotient;
+    TritFloat remainder;
+} TritDivResult;
+
 /* Global state */
 static long total_mapped_bytes = 0;
 static int operation_steps = 0;
@@ -67,6 +99,7 @@ typedef struct {
 static Script scripts[10] = {0};
 static int script_count = 0;
 
+/* Function Prototypes */
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
