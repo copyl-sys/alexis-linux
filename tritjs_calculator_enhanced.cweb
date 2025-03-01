@@ -1509,17 +1509,7 @@ void run_calculator() {
             Script* script = &scripts[script_count];
             strncpy(script->name, script_name, MAX_SCRIPT_NAME - 1);
             script->cmd_count = 0;
-
-            char* cmd_start = brace_start + 1;
-            while (cmd_start < brace_end && script->cmd_count < MAX_SCRIPT_CMDS) {
-                char* cmd_end = strchr(cmd_start, ';');
-                if (!cmd_end || cmd_end > brace_end) cmd_end = brace_end;
-                int len = cmd_end - cmd_start;
-                while (*cmd_start == ' ') cmd_start++, len--;
-                if (len > 0) {
-                    strncpy(script->commands[script->cmd_count], cmd_start, len);
-                    script->commands[script->cmd_count][len] = '\0';
-                   
+      
             char* cmd_start = brace_start + 1;
             while (cmd_start < brace_end && script->cmd_count < MAX_SCRIPT_CMDS) {
                 char* cmd_end = strchr(cmd_start, ';');
