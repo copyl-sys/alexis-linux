@@ -1017,14 +1017,18 @@ void print_help(const char* search) {
         int category_has_matches = 0;
 
         for (int j = 0; help_categories[i].entries[j].command != NULL; j++) {
-            if (search == NULL || strstr(help_categories[i].entries[j].command, search) != NULL) {
-                if (!category_has_matches) {
+            if (search == NULL || strcmp(help_categories[i].entries[j].command, search) == 0) {
+                if (!category_has_matches && search == NULL) {
                     printf("\n%s:\n", help_categories[i].category);
                     printf("-------------------------\n");
                     category_has_matches = 1;
                 }
                 printf("  %-6s - %s\n", help_categories[i].entries[j].command, help_categories[i].entries[j].description);
+                if (search != NULL) {
+                    printf("  Usage: %s\n", help_categories[i].entries[j].example);
+                }
                 found = 1;
+                if (search != NULL) return; // Stop after printing the specific command
             }
         }
     }
@@ -1036,7 +1040,6 @@ void print_help(const char* search) {
 
     printf("\n===========================\n\n");
 }
-
 
 void run_calculator() {
     char input[256];
