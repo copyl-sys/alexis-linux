@@ -1005,22 +1005,35 @@ TritHelpCategory help_categories[MAX_HELP_CATEGORIES] = {
     }
 };
 
+#include <string.h>
 
-void print_help() {
+void print_help(const char* search) {
+    int found = 0;
     printf("\nTritJS Help Documentation:\n");
     printf("===========================\n");
 
     for (int i = 0; i < MAX_HELP_CATEGORIES; i++) {
-        printf("\n%s:\n", help_categories[i].category);
-        printf("-------------------------\n");
+        int category_has_matches = 0;
+
         for (int j = 0; help_categories[i].entries[j].command != NULL; j++) {
-            printf("  %-6s - %s\n", help_categories[i].entries[j].command, help_categories[i].entries[j].description);
+            if (search == NULL || strstr(help_categories[i].entries[j].command, search) != NULL) {
+                if (!category_has_matches) {
+                    printf("\n%s:\n", help_categories[i].category);
+                    printf("-------------------------\n");
+                    category_has_matches = 1;
+                }
+                printf("  %-6s - %s\n", help_categories[i].entries[j].command, help_categories[i].entries[j].description);
+                found = 1;
+            }
         }
     }
 
-    printf("\nType a command followed by arguments (if required).\n");
-    printf("Example: add 12 2  -> 14 (ternary sum)\n");
-    printf("===========================\n\n");
+    if (!found) {
+        printf("\nNo matching commands found for '%s'.\n", search);
+        printf("Type 'help' to see all available commands.\n");
+    }
+
+    printf("\n===========================\n\n");
 }
 
 
