@@ -1,18 +1,19 @@
-@* TritJS-CISA: A Ternary Calculator with Stats and Scripting.
+
+@* TritJS-CISA: A Ternary Calculator with AI-Driven Stats and Scripting.
 This document defines \.{TritJS-CISA}, an advanced ternary (base-3) scientific calculator
-designed for the Cybersecurity and Infrastructure Security Agency (CISA), now rivaling
-the TI-82 with ternary statistics (mean, mode, median) and basic scripting in an ASCII-only
-interface. Built in C and shipped as a \.{.cweb} literate program, it emulates ternary
-computation on binary hardware, optimized for cybersecurity tasks and educational use.
-Enhancements include:
+designed for the Cybersecurity and Infrastructure Security Agency (CISA), surpassing the
+TI-82 with ternary statistics (mean, mode, median) optimized via AI-driven sorting and
+basic scripting in an ASCII-only interface. Built in C and shipped as a \.{.cweb} literate
+program, it emulates ternary computation on binary hardware, optimized for cybersecurity
+tasks and educational use. Enhancements include:
 
 - **Memory-Mapped Files**: \.{mmap} for trit arrays, visualized with stats.
 - **Security Hardening**: Audit logging to \.{/var/log/tritjs_cisa.log} and memory safety.
 - **Complex Arithmetic**: \.{TritFloat}, \.{TritBigInt}, \.{TritComplex}.
 - **Scientific Functions**: Exponentiation, roots, logarithms, trigonometry, factorials.
-- **Interactive CLI**: History, variables (A-Z), ternary stats, and scripting.
+- **Interactive CLI**: History, variables (A-Z), AI-optimized stats, and scripting.
 
-This version, dated March 01, 2025, adds median to stats for CISA.
+This version, dated March 01, 2025, uses propositional logic for sorting optimization.
 
 @*1 Usage and Documentation.
 Compile and run:
@@ -21,15 +22,15 @@ Compile and run:
 - \.{gcc -o tritjs_cisa tritjs_cisa.c -lm}.
 - \.{./tritjs_cisa}.
 
-Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{A=12}, \.{stats}.
+Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{A=12}, \.{stats quick}.
 Operations:
 - Arithmetic: \.{add}, \.{sub}, \.{mul}, \.{div}, \.{pow}, \.{fact}
 - Scientific: \.{sqrt}, \.{log3}, \.{sin}, \.{cos}, \.{tan}, \.{pi}
-- Stats: \.{stats} (mean, mode, median of history)
+- Stats: \.{stats [quick|merge]} (mean, mode, median; auto-selects if unspecified)
 - Scripting: \.{PROG <name> { <cmds> }}, \.{RUN <name>}
 - General: \.{help}, \.{quit}, \.{recall <n>}, \.{<var>=<value>}, \.{clear}
 
-Inputs are base-3 (trits: 0, 1, 2). Stats and scripts enhance functionality.
+Inputs are base-3 (trits: 0, 1, 2). AI optimizes stats sorting.
 
 @*1 Implementation.
 @c
@@ -67,11 +68,60 @@ static int script_count = 0;
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 /* Other prototypes unchanged */
 
-void display_memory_and_stats(const char* operation) {
+/* Quicksort implementation */
+void quicksort(int* arr, int low, int high) {
+    if (low < high) {
+        int pivot = arr[high];
+        int i = low - 1;
+        for (int j = low; j < high; j++) {
+            if (arr[j] <= pivot) {
+                i++;
+                int temp = arr[i];
+                arr[i] = arr[j];
+                arr[j] = temp;
+            }
+        }
+        int temp = arr[i + 1];
+        arr[i + 1] = arr[high];
+        arr[high] = temp;
+        int pi = i + 1;
+        quicksort(arr, low, pi - 1);
+        quicksort(arr, pi + 1, high);
+    }
+}
+
+/* Mergesort implementation */
+void merge(int* arr, int l, int m, int r) {
+    int n1 = m - l + 1, n2 = r - m;
+    int* L = malloc(n1 * sizeof(int));
+    int* R = malloc(n2 * sizeof(int));
+    for (int i = 0; i < n1; i++) L[i] = arr[l + i];
+    for (int j = 0; j < n2; j++) R[j] = arr[m + 1 + j];
+    int i = 0, j = 0, k = l;
+    while (i < n1 && j < n2) {
+        if (L[i] <= R[j]) arr[k++] = L[i++];
+        else arr[k++] = R[j++];
+    }
+    while (i < n1) arr[k++] = L[i++];
+    while (j < n2) arr[k++] = R[j++];
+    free(L);
+    free(R);
+}
+
+void mergesort(int* arr, int l, int r) {
+    if (l < r) {
+        int m = l + (r - l) / 2;
+        mergesort(arr, l, m);
+        mergesort(arr, m + 1, r);
+        merge(arr, l, m, r);
+    }
+}
+
+void display_memory_and_stats(const char* operation, const char* sort_method) {
     int bar_length = (int)((total_mapped_bytes * MAX_DISPLAY_WIDTH) / MAX_MMAP_SIZE);
     if (bar_length > MAX_DISPLAY_WIDTH) bar_length = MAX_DISPLAY_WIDTH;
 
-    /* Calculate mean, mode, and median from history */
+    /* Calculate stats from history */
     double mean = 0.0;
     int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
     int* all_trits = NULL;
@@ -97,14 +147,10 @@ void display_memory_and_stats(const char* operation) {
     }
     double median = -1;
     if (total_trits > 0) {
-        for (int i = 0; i < total_trits - 1; i++) {
-            for (int j = 0; j < total_trits - i - 1; j++) {
-                if (all_trits[j] > all_trits[j + 1]) {
-                    int temp = all_trits[j];
-                    all_trits[j] = all_trits[j + 1];
-                    all_trits[j + 1] = temp;
-                }
-            }
+        if (strcmp(sort_method, "quick") == 0) {
+            quicksort(all_trits, 0, total_trits - 1);
+        } else { /* merge or auto-selected */
+            mergesort(all_trits, 0, total_trits - 1);
         }
         if (total_trits % 2 == 0) {
             median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
@@ -117,8 +163,8 @@ void display_memory_and_stats(const char* operation) {
     printf("\033[2K\033[1A");
     printf("Mem: [");
     for (int i = 0; i < MAX_DISPLAY_WIDTH; i++) printf(i < bar_length ? "█" : " ");
-    printf("] %ld b | Steps: %d | Mean: %.2f | Mode: %d | Median: %.2f | Op: %s\n",
-           total_mapped_bytes, operation_steps, mean, mode >= 0 ? mode : -1, median >= 0 ? median : -1, operation);
+    printf("] %ld b | Steps: %d | Mean: %.2f | Mode: %d | Median: %.2f | Sort: %s | Op: %s\n",
+           total_mapped_bytes, operation_steps, mean, mode >= 0 ? mode : -1, median >= 0 ? median : -1, sort_method, operation);
     fflush(stdout);
 }
 
@@ -262,7 +308,7 @@ TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_p
     *is_mapped = 1;
     total_mapped_bytes += len * sizeof(Trit);
     operation_steps++;
-    display_memory_and_stats("Mapping");
+    display_memory_and_stats("Mapping", "merge"); /* Default for mapping */
     unlink(tmp_path);
     return TRIT_OK;
 }
@@ -271,7 +317,7 @@ void unmap_trits(Trit* digits, int len, int is_mapped, int fd) {
     if (is_mapped && digits != MAP_FAILED) {
         total_mapped_bytes -= len * sizeof(Trit);
         operation_steps++;
-        display_memory_and_stats("Unmapping");
+        display_memory_and_stats("Unmapping", "merge");
         munmap(digits, len * sizeof(Trit));
         if (fd >= 0) close(fd);
     } else if (!is_mapped) {
@@ -347,7 +393,7 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
             temp[max_len - pos] = sum % TRIT_MAX;
             carry = sum / TRIT_MAX;
             operation_steps++;
-            display_memory_and_stats("add");
+            display_memory_and_stats("add", "merge");
         }
         if (carry) temp[0] = carry;
         int result_len = carry ? max_len + 1 : max_len;
@@ -389,7 +435,7 @@ TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result)
             temp[pos] = prod % TRIT_MAX;
             carry = prod / TRIT_MAX;
             operation_steps++;
-            display_memory_and_stats("mul");
+            display_memory_and_stats("mul", "merge");
         }
         if (carry) temp[i] += carry;
     }
@@ -466,7 +512,7 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
             tritbig_free(multiple);
             tritbig_free(prod);
             operation_steps++;
-            display_memory_and_stats("div");
+            display_memory_and_stats("div", "merge");
         }
         result->quotient.integer[i] = digit;
     }
@@ -503,7 +549,7 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
             tritbig_free(multiple);
             tritbig_free(prod);
             operation_steps++;
-            display_memory_and_stats("div");
+            display_memory_and_stats("div", "merge");
         }
         result->quotient.fraction[i] = digit;
     }
@@ -549,7 +595,7 @@ TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** resul
         tritbig_free(*result);
         *result = temp;
         operation_steps++;
-        display_memory_and_stats("pow");
+        display_memory_and_stats("pow", "merge");
     }
     (*result)->sign = sign;
     return TRIT_OK;
@@ -583,7 +629,7 @@ TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result) {
         tritbig_free(i_bi);
         *result = temp;
         operation_steps++;
-        display_memory_and_stats("fact");
+        display_memory_and_stats("fact", "merge");
     }
     return TRIT_OK;
 }
@@ -613,14 +659,14 @@ TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result)
             int_trits[i] = int_part % TRIT_MAX;
             int_part /= TRIT_MAX;
             operation_steps++;
-            display_memory_and_stats("sqrt");
+            display_memory_and_stats("sqrt", "merge");
         }
         for (int i = precision - 1; i >= 0; i--) {
             frac_part *= TRIT_MAX;
             frac_trits[i] = (unsigned long)frac_part;
             frac_part -= (unsigned long)frac_part;
             operation_steps++;
-            display_memory_and_stats("sqrt");
+            display_memory_and_stats("sqrt", "merge");
         }
         TritBigInt* real_int;
         if ((err = tritbig_from_trits(int_trits, (a->len + 1) / 2, 0, &real_int)) != TRIT_OK) goto sqrt_cleanup;
@@ -666,14 +712,14 @@ TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result)
             imag_int[i] = int_part % TRIT_MAX;
             int_part /= TRIT_MAX;
             operation_steps++;
-            display_memory_and_stats("sqrt");
+            display_memory_and_stats("sqrt", "merge");
         }
         for (int i = precision - 1; i >= 0; i--) {
             frac_part *= TRIT_MAX;
             imag_frac[i] = (unsigned long)frac_part;
             frac_part -= (unsigned long)frac_part;
             operation_steps++;
-            display_memory_and_stats("sqrt");
+            display_memory_and_stats("sqrt", "merge");
         }
         TritBigInt* imag_bi;
         if ((err = tritbig_from_trits(imag_int, (a->len + 1) / 2, 0, &imag_bi)) != TRIT_OK) {
@@ -727,14 +773,14 @@ TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result)
         real_int[i] = r_int_part % TRIT_MAX;
         r_int_part /= TRIT_MAX;
         operation_steps++;
-        display_memory_and_stats("log3");
+        display_memory_and_stats("log3", "merge");
     }
     for (int i = precision - 1; i >= 0; i--) {
         r_frac_part *= TRIT_MAX;
         real_frac[i] = (unsigned long)r_frac_part;
         r_frac_part -= (unsigned long)r_frac_part;
         operation_steps++;
-        display_memory_and_stats("log3");
+        display_memory_and_stats("log3", "merge");
     }
     TritBigInt* real_bi;
     if ((err = tritbig_from_trits(real_int, a->len, real_val < 0 ? 1 : 0, &real_bi)) != TRIT_OK) goto log_cleanup;
@@ -750,14 +796,14 @@ TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result)
         imag_int[i] = i_int_part % TRIT_MAX;
         i_int_part /= TRIT_MAX;
         operation_steps++;
-        display_memory_and_stats("log3");
+        display_memory_and_stats("log3", "merge");
     }
     for (int i = precision - 1; i >= 0; i--) {
         i_frac_part *= TRIT_MAX;
         imag_frac[i] = (unsigned long)i_frac_part;
         i_frac_part -= (unsigned long)i_frac_part;
         operation_steps++;
-        display_memory_and_stats("log3");
+        display_memory_and_stats("log3", "merge");
     }
     TritBigInt* imag_bi;
     if ((err = tritbig_from_trits(imag_int, a->len, imag_val < 0 ? 1 : 0, &imag_bi)) != TRIT_OK) goto log_cleanup;
@@ -798,7 +844,7 @@ TritError tritjs_trig_complex(TritBigInt* a, int precision, TritComplex* result,
         frac_trits[i] = (unsigned long)frac_part;
         frac_part -= (unsigned long)frac_part;
         operation_steps++;
-        display_memory_and_stats("trig");
+        display_memory_and_stats("trig", "merge");
     }
     TritBigInt* real_bi;
     if ((err = tritbig_from_trits(int_trits, 1, sign, &real_bi)) != TRIT_OK) goto trig_cleanup;
@@ -847,7 +893,7 @@ TritError tritjs_pi(int* len, Trit** pi) {
     if (!*pi) return TRIT_ERR_MEM;
     memcpy(*pi, pi_val, *len * sizeof(Trit));
     operation_steps++;
-    display_memory_and_stats("pi");
+    display_memory_and_stats("pi", "merge");
     return TRIT_OK;
 }
 
@@ -906,7 +952,7 @@ TritError tritcomplex_to_string(TritComplex tc, char** str) {
     return TRIT_OK;
 }
 
-@*2 CLI for CISA with Stats and Scripting.
+@*2 CLI for CISA with AI-Driven Stats and Scripting.
 @c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
     if (!str || !strlen(str)) return TRIT_ERR_INPUT;
@@ -945,7 +991,7 @@ void print_help() {
     printf("  tan <a>      - Tangent of a\n");
     printf("  pi           - Pi in base-3\n");
     printf("Stats:\n");
-    printf("  stats        - Show mean, mode, median of history\n");
+    printf("  stats [quick|merge] - Show mean, mode, median (auto-selects if omitted)\n");
     printf("Memory:\n");
     printf("  <A-Z>=<val>  - Store value in variable (e.g., A=12)\n");
     printf("  recall <n>   - Recall nth last result (0 = latest)\n");
@@ -1289,7 +1335,14 @@ void run_calculator() {
             printf("History and variables cleared\n");
             continue;
         }
-        if (strcmp(input, "stats") == 0) {
+        if (strncmp(input, "stats", 5) == 0) {
+            char sort_method[10] = "auto";
+            sscanf(input, "%*s %9s", sort_method);
+            if (strcmp(sort_method, "quick") != 0 && strcmp(sort_method, "merge") != 0 && strcmp(sort_method, "auto") != 0) {
+                printf("Error: Sort method must be 'quick', 'merge', or omitted (auto)\n");
+                continue;
+            }
+
             double mean = 0.0;
             int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
             int* all_trits = NULL;
@@ -1315,23 +1368,30 @@ void run_calculator() {
             }
             double median = -1;
             if (total_trits > 0) {
-                for (int i = 0; i < total_trits - 1; i++) {
-                    for (int j = 0; j < total_trits - i - 1; j++) {
-                        if (all_trits[j] > all_trits[j + 1]) {
-                            int temp = all_trits[j];
-                            all_trits[j] = all_trits[j + 1];
-                            all_trits[j + 1] = temp;
-                        }
-                    }
+                /* Propositional Logic for AI */
+                int P = (total_trits < 10); /* Small history */
+                int Q = (trit_counts[0] > total_trits / 4 && trit_counts[1] > total_trits / 4 && trit_counts[2] > total_trits / 4); /* Uniform */
+                int R = 1; /* Assume speed preference */
+                const char* chosen_method = sort_method;
+                if (strcmp(sort_method, "auto") == 0) {
+                    if (P && !Q) chosen_method = "quick"; /* Small, non-uniform → quicksort */
+                    else chosen_method = "merge"; /* Large or uniform → mergesort */
+                }
+                if (strcmp(chosen_method, "quick") == 0) {
+                    quicksort(all_trits, 0, total_trits - 1);
+                } else {
+                    mergesort(all_trits, 0, total_trits - 1);
                 }
                 if (total_trits % 2 == 0) {
                     median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
                 } else {
                     median = all_trits[total_trits / 2];
                 }
+                printf("Mean: %.2f | Mode: %d | Median: %.2f | Total Trits: %d | Sort: %s\n",
+                       mean, mode >= 0 ? mode : -1, median, total_trits, chosen_method);
+            } else {
+                printf("No history to compute stats\n");
             }
-            printf("Mean: %.2f | Mode: %d | Median: %.2f | Total Trits: %d\n",
-                   mean, mode >= 0 ? mode : -1, median >= 0 ? median : -1, total_trits);
             free(all_trits);
             continue;
         }
