@@ -1046,10 +1046,17 @@ void run_calculator() {
         if (!fgets(input, 256, stdin)) break;
         input[strcspn(input, "\n")] = 0;
         if (strcmp(input, "quit") == 0) break;
-        if (strcmp(input, "help") == 0) {
-            print_help();
+        
+        if (strncmp(input, "help", 4) == 0) {
+            char search_term[20] = "";  // Buffer for search term
+            if (sscanf(input, "help %19s", search_term) == 1) {
+                print_help(search_term);  // Search for a specific command
+            } else {
+                print_help(NULL);  // Show full help
+            }
             continue;
         }
+
         char op[10], arg1[20], arg2[20] = "";
         int parsed = sscanf(input, "%9s %19s %19s", op, arg1, arg2);
         if (parsed < 2) {
