@@ -8,7 +8,7 @@ include:
 - Fractional support via `TritFloat` for precise results (e.g., sin(12₃) ≈ 0.221₃).
 - Arbitrary-precision arithmetic via `TritBigInt` to handle large numbers.
 - Accurate trigonometric scaling using a ternary π constant.
-- An interactive CLI for user input, now with add, sub, mul, div, pow, sin, and pi implemented.
+- An interactive CLI for user input, now with add, sub, mul, div, pow, sqrt, log3, sin, and pi implemented.
 - Robust error handling with a `TritError` enum to manage failures gracefully.
 
 The library emulates ternary computation on binary hardware, using trit-based operations where possible and
@@ -469,7 +469,7 @@ TritError tritfloat_to_string(TritFloat tf, char** str) {
 }
 
 @*1 CLI Functions.
-Interactive command-line interface with error handling and user feedback, now including div and pow.
+Interactive command-line interface with error handling and user feedback, now including sqrt and log3.
 
 @c
 /* Parses a string (e.g., "12") into a TritBigInt */
@@ -600,6 +600,34 @@ void run_calculator() {
                     free(str);
                 }
                 tritbig_free(result);
+            }
+        } else if (strcmp(op, "sqrt") == 0) {
+            TritFloat result;
+            if ((err = tritjs_sqrt_float(a, 3, &result)) != TRIT_OK) {
+                printf("Error: %s\n", trit_error_str(err));
+            } else {
+                char* str;
+                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                    printf("Error: %s\n", trit_error_str(err));
+                } else {
+                    printf("%s\n", str);
+                    free(str);
+                }
+                tritfloat_free(result);
+            }
+        } else if (strcmp(op, "log3") == 0) {
+            TritFloat result;
+            if ((err = tritjs_log3_float(a, 3, &result)) != TRIT_OK) {
+                printf("Error: %s\n", trit_error_str(err));
+            } else {
+                char* str;
+                if ((err = tritfloat_to_string(result, &str)) != TRIT_OK) {
+                    printf("Error: %s\n", trit_error_str(err));
+                } else {
+                    printf("%s\n", str);
+                    free(str);
+                }
+                tritfloat_free(result);
             }
         } else if (strcmp(op, "sin") == 0) {
             TritFloat result;
