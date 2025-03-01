@@ -955,6 +955,7 @@ TritError parse_trit_string(const char* str, TritBigInt** bi) {
     return err;
 }
 
+@d MAX_HELP_CATEGORIES 4
 @d MAX_HELP_ENTRIES 15
 
 typedef struct {
@@ -962,32 +963,66 @@ typedef struct {
     const char* description;
 } TritHelpEntry;
 
-TritHelpEntry help_entries[MAX_HELP_ENTRIES] = {
-    {"add", "Adds two ternary numbers or complex numbers."},
-    {"sub", "Subtracts the second number from the first."},
-    {"mul", "Multiplies two numbers in base-3."},
-    {"div", "Divides two numbers, showing quotient and remainder."},
-    {"pow", "Raises a number to a ternary exponent."},
-    {"sqrt", "Computes the square root (supports complex numbers)."},
-    {"log3", "Computes the base-3 logarithm (supports complex)."},
-    {"sin", "Computes the sine function."},
-    {"cos", "Computes the cosine function."},
-    {"tan", "Computes the tangent function."},
-    {"fact", "Computes the factorial of a number."},
-    {"pi", "Displays the value of π in base-3."},
-    {"help", "Displays this help message."},
-    {"quit", "Exits the calculator."},
-    {NULL, NULL} // Marks the end of the list
+typedef struct {
+    const char* category;
+    TritHelpEntry entries[MAX_HELP_ENTRIES];
+} TritHelpCategory;
+
+TritHelpCategory help_categories[MAX_HELP_CATEGORIES] = {
+    {
+        "Arithmetic Operations", {
+            {"add", "Adds two ternary numbers or complex numbers."},
+            {"sub", "Subtracts the second number from the first."},
+            {"mul", "Multiplies two numbers in base-3."},
+            {"div", "Divides two numbers, showing quotient and remainder."},
+            {"pow", "Raises a number to a ternary exponent."},
+            {"fact", "Computes the factorial of a number."},
+            {NULL, NULL}
+        }
+    },
+    {
+        "Scientific Functions", {
+            {"sqrt", "Computes the square root (supports complex numbers)."},
+            {"log3", "Computes the base-3 logarithm (supports complex)."},
+            {"pi", "Displays the value of π in base-3."},
+            {NULL, NULL}
+        }
+    },
+    {
+        "Trigonometric Functions", {
+            {"sin", "Computes the sine function."},
+            {"cos", "Computes the cosine function."},
+            {"tan", "Computes the tangent function."},
+            {NULL, NULL}
+        }
+    },
+    {
+        "General Commands", {
+            {"help", "Displays this help message."},
+            {"quit", "Exits the calculator."},
+            {NULL, NULL}
+        }
+    }
 };
+
 
 void print_help() {
     printf("\nTritJS Help Documentation:\n");
-    printf("-------------------------\n");
-    for (int i = 0; help_entries[i].command != NULL; i++) {
-        printf("  %-6s - %s\n", help_entries[i].command, help_entries[i].description);
+    printf("===========================\n");
+
+    for (int i = 0; i < MAX_HELP_CATEGORIES; i++) {
+        printf("\n%s:\n", help_categories[i].category);
+        printf("-------------------------\n");
+        for (int j = 0; help_categories[i].entries[j].command != NULL; j++) {
+            printf("  %-6s - %s\n", help_categories[i].entries[j].command, help_categories[i].entries[j].description);
+        }
     }
-    printf("-------------------------\n\n");
+
+    printf("\nType a command followed by arguments (if required).\n");
+    printf("Example: add 12 2  -> 14 (ternary sum)\n");
+    printf("===========================\n\n");
 }
+
 
 void run_calculator() {
     char input[256];
