@@ -12,8 +12,7 @@ include:
 - An interactive CLI with comprehensive operation support.
 - Refined error handling with detailed diagnostics.
 
-The library emulates ternary computation on binary hardware, prioritizing trit-based operations and extending
-to complex arithmetic for AI-inspired applications.
+The library emulates ternary computation on binary hardware, prioritizing trit-based operations and extending to complex arithmetic for AI-inspired applications.
 
 @c
 #include <stdio.h>
