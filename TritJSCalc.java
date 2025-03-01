@@ -11,23 +11,17 @@ import java.util.Date;
 import java.util.Scanner;
 
 /**
- * TritJS-CISA: A ternary (base-3) scientific calculator for CISA cybersecurity applications.
- * Originally a C program in .cweb, this Java version emulates ternary computation for tasks like
- * trit-based encoding or cryptographic analysis. Features include:
- * - Memory-mapped trit arrays for efficiency (using MappedByteBuffer).
- * - Security hardening with audit logging to /var/log/tritjs_cisa.log.
- * - Complex arithmetic with TritFloat, TritBigInt, and TritComplex.
- * - Scientific functions: exponentiation, square roots, log3, trig functions, factorials.
- * - Interactive CLI with auditing.
- * 
+ * TritJS-CISA: Optimized ternary calculator for CISA cybersecurity applications.
+ * Enhancements include efficient MappedByteBuffer usage for large trit arrays.
  * Date: March 01, 2025.
  */
 public class TritJSCISA {
     private static final int TRIT_MAX = 3;
     private static final long MAX_MMAP_SIZE = 1024 * 1024; // 1MB limit
     private static RandomAccessFile auditLog;
+    private static FileChannel sharedChannel; // Shared channel for reuse
+    private static File tempFile; // Single temp file for all mappings
 
-    // Error codes as enum
     enum TritError {
         OK("No error"), MEM("Memory allocation failed"), INPUT("Invalid input (trits 0-2 only)"),
         DIV_ZERO("Division by zero"), OVERFLOW("Overflow detected"), UNDEFINED("Operation undefined"),
@@ -39,13 +33,15 @@ public class TritJSCISA {
         public String getMessage() { return message; }
     }
 
-    // Initialize audit log
     static {
         try {
             auditLog = new RandomAccessFile("/var/log/tritjs_cisa.log", "rw");
             auditLog.seek(auditLog.length());
+            tempFile = File.createTempFile("tritjs_cisa_", ".tmp");
+            sharedChannel = FileChannel.open(tempFile.toPath(), 
+                    StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DELETE_ON_CLOSE);
         } catch (IOException e) {
-            System.err.println("Audit log initialization failed: " + e.getMessage());
+            System.err.println("Initialization failed: " + e.getMessage());
         }
     }
 
@@ -60,34 +56,50 @@ public class TritJSCISA {
         }
     }
 
-    // TritBigInt class for arbitrary-precision ternary integers
+    // Optimized TritBigInt with efficient MappedByteBuffer usage
     static class TritBigInt {
-        boolean sign; // false = positive, true = negative
-        int[] digits; // Trit array (0, 1, 2)
-        MappedByteBuffer mappedDigits; // Optional memory-mapped buffer
+        boolean sign;
+        int[] digits; // In-memory array for small data
+        MappedByteBuffer mappedDigits; // Mapped buffer for large data
+        long mappedSize; // Size in trits
+        private static long offset = 0; // Shared offset for mapping regions
 
+        // Small data constructor
         TritBigInt(int[] digits, boolean sign) throws TritError {
             if (digits == null || digits.length == 0) throw TritError.INPUT;
+            for (int d : digits) if (d < 0 || d > 2) throw TritError.INPUT;
             this.sign = sign;
             this.digits = Arrays.copyOf(digits, digits.length);
             this.mappedDigits = null;
+            this.mappedSize = 0;
         }
 
+        // Large data constructor with optimized mapping
         TritBigInt(int[] digits, boolean sign, long size) throws TritError {
             if (digits == null || digits.length == 0) throw TritError.INPUT;
+            long byteSize = size * Integer.BYTES;
+            if (byteSize > MAX_MMAP_SIZE) throw TritError.OVERFLOW;
             this.sign = sign;
-            if (size * Integer.BYTES > MAX_MMAP_SIZE) throw TritError.OVERFLOW;
+            this.digits = null;
+
             try {
-                File tempFile = File.createTempFile("tritjs_cisa_", ".tmp");
-                try (FileChannel channel = FileChannel.open(tempFile.toPath(), 
-                        StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DELETE_ON_CLOSE)) {
-                    this.mappedDigits = channel.map(FileChannel.MapMode.READ_WRITE, 0, size * Integer.BYTES);
+                synchronized (sharedChannel) { // Ensure thread-safe mapping
+                    if (offset + byteSize > sharedChannel.size()) {
+                        sharedChannel.truncate(offset + byteSize); // Pre-allocate space
+                    }
+                    this.mappedDigits = sharedChannel.map(FileChannel.MapMode.READ_WRITE, offset, byteSize);
+                    this.mappedSize = size;
+                    offset += byteSize; // Increment offset for next mapping
                     for (int i = 0; i < digits.length; i++) {
                         if (digits[i] < 0 || digits[i] > 2) throw TritError.INPUT;
                         this.mappedDigits.putInt(i * Integer.BYTES, digits[i]);
                     }
+                    // Pad remaining space with zeros
+                    for (int i = digits.length; i < size; i++) {
+                        this.mappedDigits.putInt(i * Integer.BYTES, 0);
+                    }
+                    this.mappedDigits.load(); // Preload into memory for faster access
                 }
-                this.digits = null; // Use mapped buffer instead
             } catch (IOException e) {
                 throw TritError.MMAP;
             }
@@ -95,9 +107,10 @@ public class TritJSCISA {
 
         int[] getDigits() {
             if (mappedDigits != null) {
-                int[] result = new int[(int)(mappedDigits.capacity() / Integer.BYTES)];
-                for (int i = 0; i < result.length; i++) {
-                    result[i] = mappedDigits.getInt(i * Integer.BYTES);
+                int[] result = new int[(int)mappedSize];
+                mappedDigits.rewind(); // Ensure position is at start
+                for (int i = 0; i < mappedSize; i++) {
+                    result[i] = mappedDigits.getInt();
                 }
                 return result;
             }
@@ -105,11 +118,14 @@ public class TritJSCISA {
         }
 
         int length() {
-            return mappedDigits != null ? (int)(mappedDigits.capacity() / Integer.BYTES) : digits.length;
+            return mappedDigits != null ? (int)mappedSize : digits.length;
+        }
+
+        void force() { // Force writes to disk
+            if (mappedDigits != null) mappedDigits.force();
         }
     }
 
-    // TritFloat for fractional ternary numbers
     static class TritFloat {
         boolean sign;
         int[] integer;
@@ -119,6 +135,7 @@ public class TritJSCISA {
             this.sign = bi.sign;
             this.integer = bi.getDigits();
             this.fraction = new int[0];
+            bi.force(); // Ensure mapped data is written
         }
 
         TritFloat(int[] integer, int[] fraction, boolean sign) {
@@ -128,7 +145,6 @@ public class TritJSCISA {
         }
     }
 
-    // TritComplex for complex numbers
     static class TritComplex {
         TritFloat real;
         TritFloat imag;
@@ -139,7 +155,6 @@ public class TritJSCISA {
         }
     }
 
-    // TritDivResult for division results
     static class TritDivResult {
         TritFloat quotient;
         TritFloat remainder;
@@ -150,7 +165,7 @@ public class TritJSCISA {
         }
     }
 
-    // Arithmetic operations
+    // Arithmetic operations (unchanged for brevity, optimized via TritBigInt)
     static TritBigInt add(TritBigInt a, TritBigInt b) throws TritError {
         if (a == null || b == null) throw TritError.INPUT;
         int[] aDigits = a.getDigits();
@@ -170,7 +185,8 @@ public class TritJSCISA {
             if (carry != 0) temp[0] = carry;
             int resultLen = carry != 0 ? maxLen + 1 : maxLen;
             int start = carry == 0 ? 1 : 0;
-            return new TritBigInt(Arrays.copyOfRange(temp, start, resultLen + start), a.sign);
+            return resultLen > 100 ? new TritBigInt(Arrays.copyOfRange(temp, start, resultLen + start), a.sign, resultLen)
+                                  : new TritBigInt(Arrays.copyOfRange(temp, start, resultLen + start), a.sign);
         } else {
             TritBigInt bNeg = new TritBigInt(bDigits, !b.sign);
             return add(a, bNeg);
@@ -201,7 +217,9 @@ public class TritJSCISA {
         }
         int start = 0;
         while (start < maxLen - 1 && temp[start] == 0) start++;
-        return new TritBigInt(Arrays.copyOfRange(temp, start, maxLen), a.sign != b.sign);
+        int resultLen = maxLen - start;
+        return resultLen > 100 ? new TritBigInt(Arrays.copyOfRange(temp, start, maxLen), a.sign != b.sign, resultLen)
+                              : new TritBigInt(Arrays.copyOfRange(temp, start, maxLen), a.sign != b.sign);
     }
 
     static TritDivResult divide(TritBigInt a, TritBigInt b, int precision) throws TritError {
@@ -228,7 +246,7 @@ public class TritJSCISA {
                 TritBigInt prod = multiply(b, multiple);
                 TritBigInt tempRem = new TritBigInt(remainder, a.sign);
                 TritBigInt sub = subtract(tempRem, prod);
-                if (!sub.sign) { // Positive or zero
+                if (!sub.sign) {
                     digit = q;
                     remainder = sub.getDigits();
                     break;
@@ -298,7 +316,7 @@ public class TritJSCISA {
         return result;
     }
 
-    // Scientific operations
+    // Scientific operations (unchanged for brevity, rely on optimized TritBigInt)
     static TritComplex sqrt(TritBigInt a, int precision) throws TritError {
         if (a == null || precision <= 0 || precision > 10) throw TritError.PRECISION;
         int[] aDigits = a.getDigits();
@@ -347,10 +365,9 @@ public class TritJSCISA {
     }
 
     static int[] pi() {
-        return new int[]{1, 0, 0, 1, 0, 2, 2, 1}; // Approximation
+        return new int[]{1, 0, 0, 1, 0, 2, 2, 1};
     }
 
-    // Helper to convert double to TritComplex
     static TritComplex toTritComplex(double real, double imag, int precision) throws TritError {
         int[] realInt = new int[1];
         int[] realFrac = new int[precision];
@@ -382,7 +399,7 @@ public class TritJSCISA {
         );
     }
 
-    // String conversion utilities
+    // String conversion utilities (unchanged)
     static String toString(TritBigInt bi) throws TritError {
         if (bi == null) throw TritError.INPUT;
         int[] digits = bi.getDigits();
@@ -409,7 +426,7 @@ public class TritJSCISA {
         return imagZero ? realStr : realStr + " " + imagStr + "i";
     }
 
-    // CLI
+    // CLI (unchanged except for MappedByteBuffer integration)
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.println("TritJS-CISA Ternary Calculator (quit to exit)");
@@ -493,8 +510,9 @@ public class TritJSCISA {
         }
         try {
             if (auditLog != null) auditLog.close();
+            if (sharedChannel != null) sharedChannel.close();
         } catch (IOException e) {
-            System.err.println("Error closing audit log");
+            System.err.println("Error closing resources");
         }
         scanner.close();
     }
@@ -509,6 +527,6 @@ public class TritJSCISA {
             if (d < 0 || d > 2) throw TritError.INPUT;
             digits[i] = d;
         }
-        return new TritBigInt(digits, sign);
+        return digits.length > 100 ? new TritBigInt(digits, sign, digits.length) : new TritBigInt(digits, sign);
     }
 }
