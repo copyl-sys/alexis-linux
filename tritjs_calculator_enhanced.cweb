@@ -7,14 +7,15 @@ educational tools for secure system design. Originally adapted from a JavaScript
 this version enhances the original TritJS with:
 
 - **Memory-Mapped Files**: Leveraging \.{mmap} for efficient handling of large trit arrays,
-  reducing memory overhead in high-precision operations.
+  reducing memory overhead in high-precision operations, now visualized with ASCII displays.
 - **Security Hardening**: Comprehensive error handling, audit logging to \.{/var/log/tritjs_cisa.log},
   and memory safety to meet government security standards.
 - **Complex Arithmetic**: Support for fractional numbers (\.{TritFloat}), arbitrary-precision integers
   (\.{TritBigInt}), and complex numbers (\.{TritComplex}).
 - **Scientific Functions**: Includes exponentiation, square roots, base-3 logarithms, trigonometric
   functions, and factorials, all in ternary.
-- **Interactive CLI**: A command-line interface with CISA-specific auditing and help documentation.
+- **Interactive CLI**: A command-line interface with CISA-specific auditing, help documentation,
+  and dynamic ASCII memory mapping displays.
 
 This tool is intended for use in secure environments, prioritizing performance, precision,
 and traceability. The current date is March 01, 2025, and this version reflects continuous
@@ -34,10 +35,10 @@ Supported operations include:
 - General: \.{help}, \.{quit}
 
 All inputs are in base-3 (trits: 0, 1, 2). Outputs are logged for auditing, and memory-mapped
-files are stored temporarily in a secure location.
+files are visualized dynamically on the CLI.
 
 @*1 Implementation.
-Below is the refactored C code with all operations implemented.
+Below is the refactored C code with all operations and ASCII memory mapping.
 
 @c
 #include <stdio.h>
@@ -50,9 +51,13 @@ Below is the refactored C code with all operations implemented.
 #include <time.h>
 
 #define TRIT_MAX 3
-#define MAX_MMAP_SIZE (1024 * 1024) /* 1MB limit */
+#define MAX_MMAP_SIZE (1024 * 1024)
+#define MAX_DISPLAY_WIDTH 50 /* Width of ASCII display */
 
-/* Forward declarations */
+/* Global memory tracking for visualization */
+static long total_mapped_bytes = 0;
+static int operation_steps = 0;
+
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
@@ -67,9 +72,21 @@ TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result);
 TritError tritjs_pi(int* len, Trit** pi);
 void cleanup_div(TritBigInt* temp_rem, TritFloat* dividend, TritFloat* divisor, TritDivResult* result);
 
-@*2 Error Handling.
-Enhanced with memory mapping errors and audit logging.
+/* ASCII display function */
+void display_memory_mapping(const char* operation) {
+    int bar_length = (int)((total_mapped_bytes * MAX_DISPLAY_WIDTH) / MAX_MMAP_SIZE);
+    if (bar_length > MAX_DISPLAY_WIDTH) bar_length = MAX_DISPLAY_WIDTH;
+    printf("\033[2K\033[1A"); /* Clear line and move up */
+    printf("Memory Mapping (%s): [", operation);
+    for (int i = 0; i < MAX_DISPLAY_WIDTH; i++) {
+        if (i < bar_length) printf("█");
+        else printf(" ");
+    }
+    printf("] %ld bytes | Steps: %d\n", total_mapped_bytes, operation_steps);
+    fflush(stdout);
+}
 
+@*2 Error Handling.
 @d TritError int
 @d TRIT_OK 0
 @d TRIT_ERR_MEM 1
@@ -112,26 +129,24 @@ const char* trit_error_str(TritError err) {
 }
 
 @*2 Data Structures.
-Memory-mapped trit arrays for scalability.
-
 typedef int Trit;
 typedef struct {
-    int sign;            /* 0 = positive, 1 = negative */
-    Trit* digits;        /* Memory-mapped trits */
-    int len;             /* Number of trits */
-    int is_mapped;       /* Flag for mmap cleanup */
-    int fd;              /* File descriptor */
-    char tmp_path[32];   /* Unique path for mapped file */
+    int sign;
+    Trit* digits;
+    int len;
+    int is_mapped;
+    int fd;
+    char tmp_path[32];
 } TritBigInt;
 
 typedef struct {
     int sign;
-    Trit* integer;       /* Memory-mapped integer part */
-    Trit* fraction;      /* Memory-mapped fractional part */
+    Trit* integer;
+    Trit* fraction;
     int i_len, f_len;
     int i_mapped, f_mapped;
     int i_fd, f_fd;
-    char i_tmp_path[32]; /* Unique paths for mapped parts */
+    char i_tmp_path[32];
     char f_tmp_path[32];
 } TritFloat;
 
@@ -158,12 +173,18 @@ TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_p
         return TRIT_ERR_MMAP;
     }
     *is_mapped = 1;
-    unlink(tmp_path); /* Remove after mapping */
+    total_mapped_bytes += len * sizeof(Trit); /* Track allocation */
+    operation_steps++;
+    display_memory_mapping("Mapping");
+    unlink(tmp_path);
     return TRIT_OK;
 }
 
 void unmap_trits(Trit* digits, int len, int is_mapped, int fd) {
     if (is_mapped && digits != MAP_FAILED) {
+        total_mapped_bytes -= len * sizeof(Trit); /* Update tracking */
+        operation_steps++;
+        display_memory_mapping("Unmapping");
         munmap(digits, len * sizeof(Trit));
         if (fd >= 0) close(fd);
     } else if (!is_mapped) {
@@ -223,8 +244,6 @@ void tritcomplex_free(TritComplex tc) {
 }
 
 @*2 Arithmetic Operations.
-Core ternary arithmetic functions.
-
 @c
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
     if (!a || !b || a->len > 1000 || b->len > 1000) return TRIT_ERR_INPUT;
@@ -240,6 +259,8 @@ TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
             int sum = a_trit + b_trit + carry;
             temp[max_len - pos] = sum % TRIT_MAX;
             carry = sum / TRIT_MAX;
+            operation_steps++;
+            display_memory_mapping("add");
         }
         if (carry) temp[0] = carry;
         int result_len = carry ? max_len + 1 : max_len;
@@ -280,6 +301,8 @@ TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result)
             int prod = a->digits[i] * b->digits[j] + temp[pos] + carry;
             temp[pos] = prod % TRIT_MAX;
             carry = prod / TRIT_MAX;
+            operation_steps++;
+            display_memory_mapping("mul");
         }
         if (carry) temp[i] += carry;
     }
@@ -355,6 +378,8 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
             }
             tritbig_free(multiple);
             tritbig_free(prod);
+            operation_steps++;
+            display_memory_mapping("div");
         }
         result->quotient.integer[i] = digit;
     }
@@ -390,6 +415,8 @@ TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result,
             }
             tritbig_free(multiple);
             tritbig_free(prod);
+            operation_steps++;
+            display_memory_mapping("div");
         }
         result->quotient.fraction[i] = digit;
     }
@@ -434,6 +461,8 @@ TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** resul
         }
         tritbig_free(*result);
         *result = temp;
+        operation_steps++;
+        display_memory_mapping("pow");
     }
     (*result)->sign = sign;
     return TRIT_OK;
@@ -466,13 +495,13 @@ TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result) {
         tritbig_free(*result);
         tritbig_free(i_bi);
         *result = temp;
+        operation_steps++;
+        display_memory_mapping("fact");
     }
     return TRIT_OK;
 }
 
 @*2 Scientific Operations.
-Advanced ternary scientific functions.
-
 @c
 TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result) {
     if (!a || precision <= 0 || precision > 10 || a->len > 1000) return TRIT_ERR_PRECISION;
@@ -496,11 +525,15 @@ TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result)
         for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
             int_trits[i] = int_part % TRIT_MAX;
             int_part /= TRIT_MAX;
+            operation_steps++;
+            display_memory_mapping("sqrt");
         }
         for (int i = precision - 1; i >= 0; i--) {
             frac_part *= TRIT_MAX;
             frac_trits[i] = (unsigned long)frac_part;
             frac_part -= (unsigned long)frac_part;
+            operation_steps++;
+            display_memory_mapping("sqrt");
         }
         TritBigInt* real_int;
         if ((err = tritbig_from_trits(int_trits, (a->len + 1) / 2, 0, &real_int)) != TRIT_OK) goto sqrt_cleanup;
@@ -545,11 +578,15 @@ TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result)
         for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
             imag_int[i] = int_part % TRIT_MAX;
             int_part /= TRIT_MAX;
+            operation_steps++;
+            display_memory_mapping("sqrt");
         }
         for (int i = precision - 1; i >= 0; i--) {
             frac_part *= TRIT_MAX;
             imag_frac[i] = (unsigned long)frac_part;
             frac_part -= (unsigned long)frac_part;
+            operation_steps++;
+            display_memory_mapping("sqrt");
         }
         TritBigInt* imag_bi;
         if ((err = tritbig_from_trits(imag_int, (a->len + 1) / 2, 0, &imag_bi)) != TRIT_OK) {
@@ -580,7 +617,7 @@ TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result)
     unsigned long a_val = 0;
     for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
     double real = (double)a_val * (a->sign ? -1 : 1);
-    double imag = 0; /* Simplified, assumes real input */
+    double imag = 0;
     double mag = sqrt(real * real + imag * imag);
     double arg = atan2(imag, real);
     double ln3 = log(3.0);
@@ -602,11 +639,15 @@ TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result)
     for (int i = a->len - 1; i >= 0; i--) {
         real_int[i] = r_int_part % TRIT_MAX;
         r_int_part /= TRIT_MAX;
+        operation_steps++;
+        display_memory_mapping("log3");
     }
     for (int i = precision - 1; i >= 0; i--) {
         r_frac_part *= TRIT_MAX;
         real_frac[i] = (unsigned long)r_frac_part;
         r_frac_part -= (unsigned long)r_frac_part;
+        operation_steps++;
+        display_memory_mapping("log3");
     }
     TritBigInt* real_bi;
     if ((err = tritbig_from_trits(real_int, a->len, real_val < 0 ? 1 : 0, &real_bi)) != TRIT_OK) goto log_cleanup;
@@ -621,11 +662,15 @@ TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result)
     for (int i = a->len - 1; i >= 0; i--) {
         imag_int[i] = i_int_part % TRIT_MAX;
         i_int_part /= TRIT_MAX;
+        operation_steps++;
+        display_memory_mapping("log3");
     }
     for (int i = precision - 1; i >= 0; i--) {
         i_frac_part *= TRIT_MAX;
         imag_frac[i] = (unsigned long)i_frac_part;
         i_frac_part -= (unsigned long)i_frac_part;
+        operation_steps++;
+        display_memory_mapping("log3");
     }
     TritBigInt* imag_bi;
     if ((err = tritbig_from_trits(imag_int, a->len, imag_val < 0 ? 1 : 0, &imag_bi)) != TRIT_OK) goto log_cleanup;
@@ -645,8 +690,8 @@ TritError tritjs_trig_complex(TritBigInt* a, int precision, TritComplex* result,
     if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
     unsigned long a_val = 0;
     for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
-    double pi_approx = 3.1415926535; /* Simplified */
-    double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1); /* Rough scaling */
+    double pi_approx = 3.1415926535;
+    double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
     double trig_val = trig_func(angle);
     int sign = trig_val < 0 ? 1 : 0;
     double abs_val = fabs(trig_val);
@@ -665,6 +710,8 @@ TritError tritjs_trig_complex(TritBigInt* a, int precision, TritComplex* result,
         frac_part *= TRIT_MAX;
         frac_trits[i] = (unsigned long)frac_part;
         frac_part -= (unsigned long)frac_part;
+        operation_steps++;
+        display_memory_mapping("trig");
     }
     TritBigInt* real_bi;
     if ((err = tritbig_from_trits(int_trits, 1, sign, &real_bi)) != TRIT_OK) goto trig_cleanup;
@@ -707,17 +754,17 @@ TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result) 
 }
 
 TritError tritjs_pi(int* len, Trit** pi) {
-    Trit pi_val[] = {1, 0, 0, 1, 0, 2, 2, 1}; /* Approximation */
+    Trit pi_val[] = {1, 0, 0, 1, 0, 2, 2, 1};
     *len = 8;
     *pi = malloc(*len * sizeof(Trit));
     if (!*pi) return TRIT_ERR_MEM;
     memcpy(*pi, pi_val, *len * sizeof(Trit));
+    operation_steps++;
+    display_memory_mapping("pi");
     return TRIT_OK;
 }
 
 @*2 Utility Functions.
-String conversion for output.
-
 @c
 TritError tritjs_to_string(TritBigInt* bi, char** str) {
     if (!bi || bi->len <= 0) return TRIT_ERR_INPUT;
@@ -773,12 +820,10 @@ TritError tritcomplex_to_string(TritComplex tc, char** str) {
 }
 
 @*2 CLI for CISA.
-Fully implemented with all operations.
-
 @c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
     if (!str || !strlen(str)) return TRIT_ERR_INPUT;
-    if (strlen(str) > 256) return TRIT_ERR_INPUT; /* Match input buffer */
+    if (strlen(str) > 256) return TRIT_ERR_INPUT;
     int sign = (str[0] == '-') ? 1 : 0;
     const char* mag = sign ? str + 1 : str;
     int len = strlen(mag);
@@ -819,6 +864,8 @@ void run_calculator() {
     char input[256], op[10], arg1[256], arg2[256] = "";
     printf("TritJS-CISA Ternary Calculator (quit to exit)\n");
     while (1) {
+        total_mapped_bytes = 0; /* Reset for each command */
+        operation_steps = 0;
         printf("> ");
         if (!fgets(input, 256, stdin)) break;
         input[strcspn(input, "\n")] = 0;
@@ -850,6 +897,7 @@ void run_calculator() {
             }
         }
 
+        printf("\n"); /* Space for ASCII display */
         if (strcmp(op, "add") == 0 && b) {
             TritBigInt* result;
             if ((err = tritjs_add_big(a, b, &result)) != TRIT_OK) {
@@ -1011,8 +1059,6 @@ void run_calculator() {
 }
 
 @*2 Main Function.
-Entry point for CISA deployment.
-
 @c
 int main() {
     run_calculator();
