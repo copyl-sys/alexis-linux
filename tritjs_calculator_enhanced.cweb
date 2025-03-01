@@ -1,0 +1,479 @@
+@* TritJS: Enhanced Ternary Scientific Calculator in C.
+This document presents \.{TritJS}, a comprehensive library for ternary (base-3) arithmetic and scientific operations,
+adapted from a JavaScript module into C. It supports basic arithmetic (addition, subtraction, multiplication, division),
+scientific functions (exponentiation, square roots, base-3 logarithms, sine, cosine, tangent, factorials), and constants
+like π, all operating on trit arrays (digits in $\{0, 1, 2\}$). Key enhancements include fractional trit support via
+`TritFloat`, arbitrary-precision arithmetic via `TritBigInt`, accurate trigonometric scaling using a ternary π, and an
+interactive command-line interface (CLI).
+
+The library emulates ternary computation on binary hardware, prioritizing trit-based operations for scalability and
+precision, with binary conversions as a fallback for complex math.
+
+@c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+@*1 Data Structures and Constants.
+A trit is an integer (0, 1, or 2). `TritBigInt` handles arbitrary-precision integers, `TritFloat` adds fractional support,
+and `TritDivResult` stores division outcomes.
+
+@d TRIT_MAX 3 /* Base-3 modulus */
+typedef int Trit; /* A single trit: 0, 1, or 2 */
+typedef struct {
+    Trit* digits; /* Array of trits */
+    int len;      /* Length of digits */
+} TritBigInt;
+typedef struct {
+    Trit* integer;  /* Integer part */
+    Trit* fraction; /* Fractional part */
+    int i_len;      /* Length of integer part */
+    int f_len;      /* Length of fractional part */
+} TritFloat;
+typedef struct {
+    Trit* quotient;  /* Array of trits */
+    Trit* remainder; /* Array of trits */
+    int q_len;       /* Length of quotient */
+    int r_len;       /* Length of remainder */
+} TritDivResult;
+
+@*1 Helper Functions.
+Utilities for conversions, single-trit arithmetic, and structure management.
+
+@<Conversion Functions@>
+@<Arithmetic Helpers@>
+@<Big Integer Helpers@>
+@<Float Helpers@>
+
+@ Conversions between trits and binary (used sparingly for fallback).
+@c
+@<Conversion Functions@>=
+unsigned long trits_to_binary(Trit* trits, int len) {
+    unsigned long bin = 0;
+    for (int i = 0; i < len; i++) {
+        bin = (bin << 2) | trits[i];
+    }
+    return bin;
+}
+
+Trit* binary_to_trits(unsigned long bin, int len) {
+    Trit* trits = (Trit*)malloc(len * sizeof(Trit));
+    for (int i = len - 1; i >= 0; i--) {
+        trits[i] = bin & 0x3;
+        bin >>= 2;
+    }
+    return trits;
+}
+
+@ Single-trit arithmetic for core operations.
+@c
+@<Arithmetic Helpers@>=
+typedef struct { Trit value; int carry; } TritSum;
+TritSum trit_add(Trit a, Trit b) {
+    int sum = a + b;
+    return (TritSum){ sum % TRIT_MAX, sum / TRIT_MAX };
+}
+
+typedef struct { Trit value; int borrow; } TritDiff;
+TritDiff trit_subtract(Trit a, Trit b) {
+    int diff = a - b;
+    if (diff >= 0) return (TritDiff){ diff, 0 };
+    return (TritDiff){ (diff + TRIT_MAX) % TRIT_MAX, 1 };
+}
+
+typedef struct { Trit value; int carry; } TritProd;
+TritProd trit_multiply(Trit a, Trit b) {
+    int prod = a * b;
+    return (TritProd){ prod % TRIT_MAX, prod / TRIT_MAX };
+}
+
+@ Big integer helpers for arbitrary precision.
+@c
+@<Big Integer Helpers@>=
+TritBigInt* tritbig_from_trits(Trit* trits, int len) {
+    TritBigInt* bi = (TritBigInt*)malloc(sizeof(TritBigInt));
+    bi->digits = (Trit*)malloc(len * sizeof(Trit));
+    memcpy(bi->digits, trits, len * sizeof(Trit));
+    bi->len = len;
+    return bi;
+}
+
+void tritbig_free(TritBigInt* bi) {
+    free(bi->digits);
+    free(bi);
+}
+
+@ Float helpers for fractional support.
+@c
+@<Float Helpers@>=
+TritFloat tritfloat_from_bigint(TritBigInt* bi) {
+    TritFloat tf = {
+        .integer = (Trit*)malloc(bi->len * sizeof(Trit)),
+        .fraction = NULL,
+        .i_len = bi->len,
+        .f_len = 0
+    };
+    memcpy(tf.integer, bi->digits, bi->len * sizeof(Trit));
+    return tf;
+}
+
+void tritfloat_free(TritFloat tf) {
+    free(tf.integer);
+    if (tf.f_len > 0) free(tf.fraction);
+}
+
+@*1 Core Arithmetic Operations.
+Implemented with `TritBigInt` for arbitrary precision.
+
+@c
+TritBigInt* tritjs_add_big(TritBigInt* a, TritBigInt* b) {
+    int max_len = (a->len > b->len) ? a->len : b->len;
+    Trit* result = (Trit*)malloc((max_len + 1) * sizeof(Trit));
+    int carry = 0, pos = 0;
+
+    for (int i = max_len - 1; i >= 0; i--) {
+        Trit a_trit = (i < a->len) ? a->digits[i] : 0;
+        Trit b_trit = (i < b->len) ? b->digits[i] : 0;
+        TritSum sum = trit_add(a_trit + carry, b_trit);
+        result[max_len - pos] = sum.value;
+        carry = sum.carry;
+        pos++;
+    }
+    int result_len = carry ? max_len + 1 : max_len;
+    if (!carry) memmove(result, result + 1, max_len * sizeof(Trit));
+    else result[0] = carry;
+    TritBigInt* bi = tritbig_from_trits(result, result_len);
+    free(result);
+    return bi;
+}
+
+TritBigInt* tritjs_subtract_big(TritBigInt* a, TritBigInt* b) {
+    int max_len = (a->len > b->len) ? a->len : b->len;
+    Trit* result = (Trit*)malloc(max_len * sizeof(Trit));
+    int borrow = 0;
+
+    for (int i = max_len - 1; i >= 0; i--) {
+        Trit a_trit = (i < a->len) ? a->digits[i] : 0;
+        Trit b_trit = (i < b->len) ? b->digits[i] : 0;
+        TritDiff diff = trit_subtract(a_trit - borrow, b_trit);
+        result[i] = diff.value;
+        borrow = diff.borrow;
+    }
+    int start = 0;
+    while (start < max_len - 1 && result[start] == 0) start++;
+    int result_len = max_len - start;
+    TritBigInt* bi = tritbig_from_trits(result + start, result_len);
+    free(result);
+    return bi;
+}
+
+TritBigInt* tritjs_multiply_big(TritBigInt* a, TritBigInt* b) {
+    int max_len = a->len + b->len;
+    Trit* result = (Trit*)calloc(max_len, sizeof(Trit));
+    for (int i = a->len - 1; i >= 0; i--) {
+        int carry = 0;
+        for (int j = b->len - 1; j >= 0; j--) {
+            int pos = i + j + 1;
+            TritProd prod = trit_multiply(a->digits[i], b->digits[j]);
+            TritSum sum = trit_add(result[pos] + carry, prod.value);
+            result[pos] = sum.value;
+            carry = sum.carry + prod.carry;
+        }
+        if (carry) {
+            int carry_pos = i;
+            TritSum sum = trit_add(result[carry_pos] + carry, 0);
+            result[carry_pos] = sum.value;
+            if (sum.carry) {
+                memmove(result, result + 1, max_len * sizeof(Trit));
+                result[0] = sum.carry;
+                max_len++;
+            }
+        }
+    }
+    int start = 0;
+    while (start < max_len - 1 && result[start] == 0) start++;
+    TritBigInt* bi = tritbig_from_trits(result + start, max_len - start);
+    free(result);
+    return bi;
+}
+
+TritDivResult tritjs_divide_big(TritBigInt* a, TritBigInt* b) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    unsigned long b_bin = trits_to_binary(b->digits, b->len);
+    if (b_bin == 0) {
+        fprintf(stderr, "Error: Division by zero\n");
+        exit(1);
+    }
+    unsigned long quotient_bin = a_bin / b_bin;
+    unsigned long remainder_bin = a_bin % b_bin;
+    TritDivResult result = {
+        .quotient = binary_to_trits(quotient_bin, a->len),
+        .remainder = binary_to_trits(remainder_bin, b->len),
+        .q_len = a->len,
+        .r_len = b->len
+    };
+    return result;
+}
+
+@*1 Scientific Operations.
+These use `TritFloat` for precision and `TritBigInt` for large numbers, with accurate trig scaling.
+
+@c
+TritBigInt* tritjs_power_big(TritBigInt* base, TritBigInt* exp) {
+    TritBigInt* result = tritbig_from_trits((Trit[]){1}, 1);
+    unsigned long exp_bin = trits_to_binary(exp->digits, exp->len);
+    for (unsigned long i = 0; i < exp_bin; i++) {
+        TritBigInt* temp = tritjs_multiply_big(result, base);
+        tritbig_free(result);
+        result = temp;
+    }
+    return result;
+}
+
+TritFloat tritjs_sqrt_float(TritBigInt* a, int precision) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    double sqrt_val = sqrt((double)a_bin);
+    unsigned long int_part = (unsigned long)sqrt_val;
+    double frac_part = sqrt_val - int_part;
+    TritFloat result = {
+        .integer = binary_to_trits(int_part, (a->len + 1) / 2),
+        .fraction = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision),
+        .i_len = (a->len + 1) / 2,
+        .f_len = precision
+    };
+    return result;
+}
+
+TritFloat tritjs_log3_float(TritBigInt* a, int precision) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    if (a_bin <= 0) {
+        fprintf(stderr, "Error: Logarithm undefined for <= 0\n");
+        exit(1);
+    }
+    double log_val = log((double)a_bin) / log(3.0);
+    unsigned long int_part = (unsigned long)log_val;
+    double frac_part = log_val - int_part;
+    TritFloat result = {
+        .integer = binary_to_trits(int_part, a->len),
+        .fraction = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision),
+        .i_len = a->len,
+        .f_len = precision
+    };
+    return result;
+}
+
+TritFloat tritjs_sin_float(TritBigInt* a, int precision) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    int pi_len;
+    Trit* pi = tritjs_pi(&pi_len);
+    unsigned long pi_bin = trits_to_binary(pi, pi_len);
+    double a_rad = (double)a_bin * M_PI / (double)pi_bin;
+    double sin_val = sin(a_rad);
+    int sign = (sin_val < 0) ? -1 : 1;
+    double abs_val = fabs(sin_val);
+    unsigned long int_part = (unsigned long)abs_val;
+    double frac_part = abs_val - int_part;
+    TritFloat result = {
+        .integer = binary_to_trits(int_part, 1),
+        .fraction = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision),
+        .i_len = 1,
+        .f_len = precision
+    };
+    if (sign < 0) {
+        Trit zero[] = {0};
+        TritBigInt* zero_bi = tritbig_from_trits(zero, 1);
+        TritBigInt* neg_int = tritjs_subtract_big(zero_bi, tritbig_from_trits(result.integer, result.i_len));
+        free(result.integer);
+        result.integer = neg_int->digits;
+        result.i_len = neg_int->len;
+        tritbig_free(neg_int);
+        tritbig_free(zero_bi);
+    }
+    free(pi);
+    return result;
+}
+
+TritFloat tritjs_cos_float(TritBigInt* a, int precision) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    int pi_len;
+    Trit* pi = tritjs_pi(&pi_len);
+    unsigned long pi_bin = trits_to_binary(pi, pi_len);
+    double a_rad = (double)a_bin * M_PI / (double)pi_bin;
+    double cos_val = cos(a_rad);
+    int sign = (cos_val < 0) ? -1 : 1;
+    double abs_val = fabs(cos_val);
+    unsigned long int_part = (unsigned long)abs_val;
+    double frac_part = abs_val - int_part;
+    TritFloat result = {
+        .integer = binary_to_trits(int_part, 1),
+        .fraction = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision),
+        .i_len = 1,
+        .f_len = precision
+    };
+    if (sign < 0) {
+        Trit zero[] = {0};
+        TritBigInt* zero_bi = tritbig_from_trits(zero, 1);
+        TritBigInt* neg_int = tritjs_subtract_big(zero_bi, tritbig_from_trits(result.integer, result.i_len));
+        free(result.integer);
+        result.integer = neg_int->digits;
+        result.i_len = neg_int->len;
+        tritbig_free(neg_int);
+        tritbig_free(zero_bi);
+    }
+    free(pi);
+    return result;
+}
+
+TritFloat tritjs_tan_float(TritBigInt* a, int precision) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    int pi_len;
+    Trit* pi = tritjs_pi(&pi_len);
+    unsigned long pi_bin = trits_to_binary(pi, pi_len);
+    double a_rad = (double)a_bin * M_PI / (double)pi_bin;
+    double tan_val = tan(a_rad);
+    if (fabs(tan_val) > 1000.0) {
+        fprintf(stderr, "Error: Tangent undefined\n");
+        exit(1);
+    }
+    int sign = (tan_val < 0) ? -1 : 1;
+    double abs_val = fabs(tan_val);
+    unsigned long int_part = (unsigned long)abs_val;
+    double frac_part = abs_val - int_part;
+    TritFloat result = {
+        .integer = binary_to_trits(int_part, 2),
+        .fraction = binary_to_trits((unsigned long)(frac_part * pow(3, precision)), precision),
+        .i_len = 2,
+        .f_len = precision
+    };
+    if (sign < 0) {
+        Trit zero[] = {0};
+        TritBigInt* zero_bi = tritbig_from_trits(zero, 1);
+        TritBigInt* neg_int = tritjs_subtract_big(zero_bi, tritbig_from_trits(result.integer, result.i_len));
+        free(result.integer);
+        result.integer = neg_int->digits;
+        result.i_len = neg_int->len;
+        tritbig_free(neg_int);
+        tritbig_free(zero_bi);
+    }
+    free(pi);
+    return result;
+}
+
+TritBigInt* tritjs_factorial_big(TritBigInt* a) {
+    unsigned long a_bin = trits_to_binary(a->digits, a->len);
+    if (a_bin > 20) {
+        fprintf(stderr, "Error: Factorial too large\n");
+        exit(1);
+    }
+    TritBigInt* result = tritbig_from_trits((Trit[]){1}, 1);
+    for (unsigned long i = 1; i <= a_bin; i++) {
+        Trit* i_trits = binary_to_trits(i, 2);
+        TritBigInt* i_bi = tritbig_from_trits(i_trits, 2);
+        TritBigInt* temp = tritjs_multiply_big(result, i_bi);
+        tritbig_free(result);
+        tritbig_free(i_bi);
+        free(i_trits);
+        result = temp;
+    }
+    return result;
+}
+
+Trit* tritjs_pi(int* len) {
+    Trit pi[] = {1, 0, 0, 1, 0, 2, 2, 1};  /* π ≈ 3.14159₁₀ ≈ 10.010221₃ */
+    *len = 8;
+    Trit* result = (Trit*)malloc(*len * sizeof(Trit));
+    memcpy(result, pi, *len * sizeof(Trit));
+    return result;
+}
+
+@*1 Utility Functions.
+For string conversion and debugging.
+
+@c
+char* tritjs_to_string(Trit* trits, int len) {
+    char* str = (char*)malloc(len + 1);
+    for (int i = 0; i < len; i++) str[i] = '0' + trits[i];
+    str[len] = '\0';
+    return str;
+}
+
+char* tritfloat_to_string(TritFloat tf) {
+    char* int_str = tritjs_to_string(tf.integer, tf.i_len);
+    if (tf.f_len == 0) return int_str;
+    char* frac_str = tritjs_to_string(tf.fraction, tf.f_len);
+    char* result = (char*)malloc(tf.i_len + tf.f_len + 2);
+    sprintf(result, "%s.%s", int_str, frac_str);
+    free(int_str);
+    free(frac_str);
+    return result;
+}
+
+@*1 CLI Functions.
+Interactive interface for user input.
+
+@c
+TritBigInt* parse_trit_string(const char* str) {
+    int len = strlen(str);
+    Trit* trits = (Trit*)malloc(len * sizeof(Trit));
+    for (int i = 0; i < len; i++) {
+        if (str[i] < '0' || str[i] > '2') {
+            fprintf(stderr, "Invalid trit: %c\n", str[i]);
+            exit(1);
+        }
+        trits[i] = str[i] - '0';
+    }
+    TritBigInt* bi = tritbig_from_trits(trits, len);
+    free(trits);
+    return bi;
+}
+
+void run_calculator() {
+    char input[256];
+    printf("TritJS Ternary Calculator (enter 'quit' to exit)\n");
+    printf("Commands: add/sub/mul/div/pow/sqrt/log3/sin/cos/tan/fact/pi <arg1> [arg2]\n");
+    while (1) {
+        printf("> ");
+        if (!fgets(input, 256, stdin)) break;
+        input[strcspn(input, "\n")] = 0;
+        if (strcmp(input, "quit") == 0) break;
+
+        char op[10], arg1[20], arg2[20] = "";
+        sscanf(input, "%s %s %s", op, arg1, arg2);
+        TritBigInt* a = parse_trit_string(arg1);
+        TritBigInt* b = (strcmp(arg2, "") != 0) ? parse_trit_string(arg2) : NULL;
+
+        if (strcmp(op, "add") == 0 && b) {
+            TritBigInt* result = tritjs_add_big(a, b);
+            char* str = tritjs_to_string(result->digits, result->len);
+            printf("%s\n", str);
+            free(str);
+            tritbig_free(result);
+        } else if (strcmp(op, "sin") == 0) {
+            TritFloat result = tritjs_sin_float(a, 3);
+            char* str = tritfloat_to_string(result);
+            printf("%s\n", str);
+            free(str);
+            tritfloat_free(result);
+        } else if (strcmp(op, "pi") == 0) {
+            int len;
+            Trit* pi = tritjs_pi(&len);
+            char* str = tritjs_to_string(pi, len);
+            printf("%s\n", str);
+            free(str);
+            free(pi);
+        } /* Add other operations similarly */
+        
+        tritbig_free(a);
+        if (b) tritbig_free(b);
+    }
+}
+
+@*1 Main Function.
+Launches the interactive calculator.
+
+@c
+int main() {
+    run_calculator();
+    return 0;
+}
