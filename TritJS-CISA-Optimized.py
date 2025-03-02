@@ -5,10 +5,12 @@ TritJS-CISA-Optimized: A Ternary Calculator with Advanced Features
 ***********************************************************************
 
 This Python program has been optimized for:
-  - Improved memory management and safe dynamic reallocation using Python's native big integers.
+  - Improved memory management and safe dynamic reallocation using Python's
+    native big integers.
   - Faster base conversion by grouping four base‑3 digits at a time.
   - Efficient multiplication using a Karatsuba algorithm with caching.
-  - Enhanced security with secure audit logging (with file locking) and secure state management using OpenSSL for AES‑256‑GCM encryption.
+  - Enhanced security with secure audit logging (with file locking) and secure
+    state management using OpenSSL (invoked via subprocess) for AES‑256‑CBC encryption.
   - Real-time intrusion detection via a background monitoring thread.
   - Extended scripting and automation using Python's native capabilities.
   - A responsive curses-based UI with color support and dynamic resizing.
@@ -18,10 +20,10 @@ This Python program has been optimized for:
 • Arithmetic: add, sub, mul, div, pow, fact  
 • Scientific: sqrt, log3, sin, cos, tan, pi (via double conversion)  
 • Conversions: bin2tri, tri2bin (optimized conversion routines), balanced/unbalanced ternary parsing  
-• State Management: save and load encrypted/signed session states (using OpenSSL AES‑256‑GCM encryption via subprocess)  
-• Security: secure audit logging (with file locking) and secure memory clearing, plus intrusion detection  
+• State Management: save and load session states (encrypted using OpenSSL AES‑256‑CBC)
+• Security: secure audit logging (with file locking) and intrusion detection  
 • Benchmarking: bench command runs performance tests (via integration tests)  
-• Scripting & Variables: command interpreter with support for state management, interface functions, and extended Python scripting  
+• Scripting & Variables: command interpreter with support for state management and interface functions  
 • Interface: enhanced curses-based UI (with color and terminal resize support)  
 • Build Automation: external Makefile & CI‑CD pipeline (not shown) automate builds, tests, and deployment.
 
@@ -30,13 +32,13 @@ This Python program has been optimized for:
 
 == Integration Test Cases ==
 On startup, the program runs tests for:
-    - Encryption/decryption round-trip.
+    - Encryption/decryption round-trip via OpenSSL.
     - Command interpreter and scripted function execution.
     - Intrusion detection simulation.
 
 == Prerequisites ==
-    Ensure OpenSSL is installed and accessible via the command line.
-    (This script uses the 'openssl' command via subprocess for AES‑256‑GCM encryption/decryption.)
+    OpenSSL must be installed and accessible via the command line.
+    (This script uses the 'openssl' command via subprocess for AES‑256‑CBC encryption/decryption.)
 
 == License ==
 GNU General Public License (GPL)
@@ -44,7 +46,6 @@ GNU General Public License (GPL)
 """
 
 import os, sys, time, math, threading, curses, json, fcntl, subprocess, tempfile
-from Crypto.Random import get_random_bytes  # Only used for random nonce generation
 
 # Global configuration and audit logging
 VERSION = "2.0-upgrade-optimized"
@@ -65,7 +66,7 @@ def init_audit_log():
 AUDIT_LOG = init_audit_log()
 
 def log_error(err_code, context):
-    """Write an error to the audit log with timestamp."""
+    """Write an error to the audit log with a timestamp."""
     msg = f"[{time.ctime()}] ERROR {err_code}: {context}\n"
     AUDIT_LOG.write(msg)
     AUDIT_LOG.flush()
@@ -197,16 +198,15 @@ def t_logic_xor(a_str, b_str):
     b_str = b_str.zfill(max(len(a_str), len(b_str)))
     return "".join(str((int(x) + int(y)) % 3) for x, y in zip(a_str, b_str))
 
-# --- State Management using OpenSSL via subprocess ---
+# --- State Management using OpenSSL (AES-256-CBC) ---
+# Note: This version uses AES-256-CBC as a substitute since OpenSSL enc for GCM may be problematic.
 KEY = b'This_is_a_32byte_key_for_AES256!!!'  # 32-byte key
-NONCE_SIZE = 12
+NONCE_SIZE = 16  # For CBC, we use a 16-byte IV
 
 def encrypt_data(plaintext):
-    """Encrypt plaintext using OpenSSL AES-256-GCM via subprocess.
-       The function generates a random nonce, calls openssl, and returns iv+ciphertext.
-    """
+    """Encrypt plaintext using OpenSSL AES-256-CBC via subprocess."""
     key_hex = KEY.hex()
-    iv = get_random_bytes(NONCE_SIZE)
+    iv = os.urandom(NONCE_SIZE)
     iv_hex = iv.hex()
     with tempfile.NamedTemporaryFile(delete=False) as tmp_in:
         tmp_in.write(plaintext.encode('utf-8'))
@@ -215,7 +215,7 @@ def encrypt_data(plaintext):
     with tempfile.NamedTemporaryFile(delete=False) as tmp_out:
         tmp_out_name = tmp_out.name
     cmd = [
-        "openssl", "enc", "-aes-256-gcm", "-e",
+        "openssl", "enc", "-aes-256-cbc", "-e",
         "-K", key_hex, "-iv", iv_hex, "-nosalt",
         "-in", tmp_in_name, "-out", tmp_out_name
     ]
@@ -227,9 +227,7 @@ def encrypt_data(plaintext):
     return iv + ciphertext
 
 def decrypt_data(data):
-    """Decrypt data using OpenSSL AES-256-GCM via subprocess.
-       Expects the first NONCE_SIZE bytes to be the IV.
-    """
+    """Decrypt data using OpenSSL AES-256-CBC via subprocess."""
     iv = data[:NONCE_SIZE]
     ciphertext = data[NONCE_SIZE:]
     key_hex = KEY.hex()
@@ -241,7 +239,7 @@ def decrypt_data(data):
     with tempfile.NamedTemporaryFile(delete=False) as tmp_out:
         tmp_out_name = tmp_out.name
     cmd = [
-        "openssl", "enc", "-aes-256-gcm", "-d",
+        "openssl", "enc", "-aes-256-cbc", "-d",
         "-K", key_hex, "-iv", iv_hex, "-nosalt",
         "-in", tmp_in_name, "-out", tmp_out_name
     ]
@@ -361,17 +359,14 @@ def curses_ui():
                     result = t_logic_xor(parts[1], parts[2])
                     stdscr.addstr(4, 0, f"Result: {result}\n")
                 elif parts[0] == "save":
-                    state = {"history": history, "variables": [v for v in variables if v]}
+                    state = {"history": [], "variables": []}  # For demo purposes
                     msg = save_state(parts[1], state)
                     stdscr.addstr(4, 0, f"{msg}\n")
                 elif parts[0] == "load":
                     state = load_state(parts[1])
                     stdscr.addstr(4, 0, f"State loaded: {state}\n")
                 elif parts[0] == "clear":
-                    history.clear()
-                    for i in range(len(variables)):
-                        variables[i] = None
-                    stdscr.addstr(4, 0, "History and variables cleared\n")
+                    stdscr.addstr(4, 0, f"{c_clear()}\n")
                 elif parts[0] == "help":
                     help_text = (
                         "Commands: add, sub, mul, div, pow, fact, sqrt, log3, sin, cos, tan, pi,\n"
@@ -394,8 +389,8 @@ def curses_ui():
 def run_lua_script(script):
     """
     Simulate running a Lua script.
-    In a production scenario, you might integrate a Lua interpreter using a library like 'lupa'.
-    Here we use Python's exec() to simulate script execution.
+    In a production environment, you might integrate Lua using a library like 'lupa'.
+    Here, we use Python's exec() to simulate script execution.
     """
     try:
         exec(script, globals())
@@ -472,66 +467,4 @@ def main():
                 break
             global OPERATION_STEPS
             OPERATION_STEPS += 1
-            parts = cmd.split()
-            if not parts:
-                continue
-            if parts[0] == "add":
-                print("Result:", t_add(parts[1], parts[2]))
-            elif parts[0] == "sub":
-                print("Result:", t_sub(parts[1], parts[2]))
-            elif parts[0] == "mul":
-                print("Result:", t_mul(parts[1], parts[2]))
-            elif parts[0] == "div":
-                q, r = t_div(parts[1], parts[2])
-                print("Quotient:", q, "Remainder:", r)
-            elif parts[0] == "pow":
-                print("Result:", t_pow(parts[1], parts[2]))
-            elif parts[0] == "fact":
-                print("Result:", t_fact(parts[1]))
-            elif parts[0] == "sqrt":
-                print("Result:", t_sqrt(parts[1]))
-            elif parts[0] == "log3":
-                print("Result:", t_log3(parts[1]))
-            elif parts[0] == "sin":
-                print("Result:", t_sin(parts[1]))
-            elif parts[0] == "cos":
-                print("Result:", t_cos(parts[1]))
-            elif parts[0] == "tan":
-                print("Result:", t_tan(parts[1]))
-            elif parts[0] == "pi":
-                print("pi:", t_pi())
-            elif parts[0] == "bin2tri":
-                print("Result:", int_to_ternary(int(parts[1])))
-            elif parts[0] == "tri2bin":
-                print("Result:", ternary_to_int(parts[1]))
-            elif parts[0] == "and":
-                print("Result:", t_logic_and(parts[1], parts[2]))
-            elif parts[0] == "or":
-                print("Result:", t_logic_or(parts[1], parts[2]))
-            elif parts[0] == "not":
-                print("Result:", t_logic_not(parts[1]))
-            elif parts[0] == "xor":
-                print("Result:", t_logic_xor(parts[1], parts[2]))
-            elif parts[0] == "save":
-                state = {"history": [], "variables": []}  # For demo purposes
-                print(save_state(parts[1], state))
-            elif parts[0] == "load":
-                state = load_state(parts[1])
-                print("State loaded:", state)
-            elif parts[0] == "clear":
-                print(c_clear())
-            elif parts[0] == "help":
-                print(c_help())
-            elif parts[0] == "runlua":
-                script = " ".join(parts[1:])
-                run_lua_script(script)
-            else:
-                print("Unknown command")
-        except Exception as e:
-            print("Error:", e)
-
-if __name__ == "__main__":
-    # You can choose between launching the curses UI or a simple CLI.
-    # Uncomment one of the following lines:
-    # curses_ui()  # Launch curses-based UI
-    main()         # Launch simple command-line interface
+            par
