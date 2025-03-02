@@ -1,4 +1,5 @@
-@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements, Comprehensive Benchmarking, and Ncurses Interface.
+@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements,
+   Comprehensive Benchmarking, and Ncurses Interface.
 This document defines \.{TritJS-CISA}, a ternary (base-3) scientific calculator built for cybersecurity
 and educational use. In this revision, we incorporate additional security features (such as encrypted state
 management, secure audit logging with digital signing stubs, and access controls), rely on common POSIX functions
@@ -23,25 +24,15 @@ benchmarking, and an interactive ncurses interface.
 @*1 Usage and Documentation.
 Compile and run:
   - Process with cweave:
-         cweave tritjs_cisa_ncurses.cweb
+         cweave TritCalc.cweb
   - Process with ctangle:
-         ctangle tritjs_cisa_ncurses.cweb
+         ctangle TritCalc.cweb
   - Compile with hardened flags (example):
-         gcc -DUSE_READLINE -o tritjs_cisa tritjs_cisa_ncurses.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses
+         gcc -DUSE_READLINE -o tritjs_cisa TritCalc.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses
   - Run:
          ./tritjs_cisa
-Supported commands:
-  • Arithmetic: add, sub, mul, div, pow, fact
-  • Scientific: sqrt, log3, sin, cos, tan, pi
-  • Stats: stats [quick|merge]
-  • Scripting: PROG <name> {<cmds>}, RUN <name>
-  • Storage: save <file>, load <file> (state files are encrypted, MIME: application/x-tritjs-cisa)
-  • Conversion: bin2tri <number>, tri2bin <trit>
-  • Security: monitor (runs intrusion detection/self-healing stub)
-  • Benchmark: bench (runs comprehensive benchmarks)
-  • Ncurses interface: The program runs with a full ncurses UI, displaying a status bar, output window, and input window.
-  • General: help, quit, recall <n>, <var>=<value>, clear, test
-
+Supported commands include arithmetic (add, sub, mul, div, pow, fact), scientific (sqrt, log3, sin, cos, tan, pi),
+state management (save, load), conversion (bin2tri, tri2bin), security (monitor), benchmarking (bench), and others.
 Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and digitally signed.
 
 @*1 Implementation.
@@ -55,15 +46,16 @@ Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and digitally
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
-#include <limits.h>     /* For ULONG_MAX */
+#include <limits.h>
 #include <ncurses.h>
 #ifdef USE_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
 #endif
+#include <errno.h>
 
 #define TRIT_MAX 3
-#define MAX_MMAP_SIZE (1024 * 1024)
+#define MAX_MMAP_SIZE (1024 * 1024)  /* 1MB limit */
 #define MAX_DISPLAY_WIDTH 50
 #define MAX_HISTORY 10
 #define MAX_VAR_NAME 2
@@ -80,18 +72,18 @@ typedef int Trit;
 typedef int TritError;  /* 0=OK, 1=Memory, 2=Input, 3=DivZero, 4=Overflow, 5=Undefined, 6=Negative, 7=Precision, 8=MMap, 9=Script */
 
 typedef struct {
-    int sign;
-    Trit* digits;
-    int len;
-    int is_mapped;
-    int fd;
+    int sign;            /* 0 = positive, 1 = negative */
+    Trit* digits;        /* Memory-mapped trits */
+    int len;             /* Number of trits */
+    int is_mapped;       /* Flag for mmap cleanup */
+    int fd;              /* File descriptor */
     char tmp_path[32];
 } TritBigInt;
 
 typedef struct {
     int sign;
-    Trit* integer;
-    Trit* fraction;
+    Trit* integer;       /* Memory-mapped integer part */
+    Trit* fraction;      /* Memory-mapped fractional part */
     int i_len, f_len;
     int i_mapped, f_mapped;
     int i_fd, f_fd;
@@ -146,6 +138,14 @@ void tritfloat_free(TritFloat tf);
 TritError tritjs_to_string(TritBigInt* bi, char** str);
 TritError tritfloat_to_string(TritFloat tf, char** str);
 TritError tritcomplex_to_string(TritComplex tc, char** str);
+TritError binary_to_trit(int num, TritBigInt** result);
+TritError trit_to_binary(TritBigInt* tri, int* result);
+void add_to_history(const char* entry);
+void store_variable(const char* var_name, TritBigInt* value);
+TritBigInt* recall_variable(const char* var_name);
+void clear_history_and_vars(void);
+void run_tests(void);
+void display_memory_and_stats(const char* action, const char* mode);
 
 /* --- Logging and Audit Functions --- */
 FILE* audit_log = NULL;
@@ -179,7 +179,7 @@ const char* trit_error_str(TritError err) {
     }
 }
 
-/* --- POSIX-Based map_trits() --- */
+/* --- POSIX-Based Memory Mapping --- */
 TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_path) {
     if (len * sizeof(Trit) > MAX_MMAP_SIZE) return 4;
     strcpy(tmp_path, "/tmp/tritjs_cisa_XXXXXX");
@@ -315,7 +315,7 @@ void self_heal() {
     /* Implement state reload, process termination, etc. */
 }
 
-/* --- Benchmarking Tool: Comprehensive Bench Command --- */
+/* --- Benchmarking Tool --- */
 void run_benchmarks() {
     printf("Running comprehensive benchmarks...\n");
     int iterations = 10000;
@@ -346,7 +346,7 @@ void run_benchmarks() {
     }
     PROFILE_END("Multiplication");
     
-    /* Benchmark Division (using non-zero divisor) */
+    /* Benchmark Division */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *b;
@@ -396,12 +396,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Conversion");
 }
-
-/* --- (Arithmetic and Scientific Operations) ---
-   Arithmetic functions (tritjs_add_big, tritjs_subtract_big, etc.) and scientific functions (tritjs_sqrt_complex,
-   tritjs_log3_complex, tritjs_sin_complex, tritjs_cos_complex, tritjs_tan_complex, tritjs_pi) are assumed to be
-   defined as in previous revisions. For brevity, their full implementations are not repeated here.
-*/
 
 /* --- Utility Functions --- */
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
@@ -529,6 +523,50 @@ TritError trit_to_binary(TritBigInt* tri, int* result) {
 }
 
 /* --- Enhanced CLI Commands and Benchmarking --- */
+void add_to_history(const char* entry) {
+    if (history_count < MAX_HISTORY) {
+        history[history_count++] = strdup(entry);
+    } else {
+        free(history[0]);
+        for (int i = 1; i < MAX_HISTORY; i++) {
+            history[i-1] = history[i];
+        }
+        history[MAX_HISTORY-1] = strdup(entry);
+    }
+}
+void store_variable(const char* var_name, TritBigInt* value) {
+    int index = var_name[0] - 'A';
+    if (variables[index]) tritbig_free(variables[index]);
+    variables[index] = value;
+}
+TritBigInt* recall_variable(const char* var_name) {
+    int index = var_name[0] - 'A';
+    return variables[index];
+}
+void clear_history_and_vars(void) {
+    for (int i = 0; i < history_count; i++) {
+        free(history[i]);
+        history[i] = NULL;
+    }
+    history_count = 0;
+    for (int i = 0; i < 26; i++) {
+        if (variables[i]) {
+            tritbig_free(variables[i]);
+            variables[i] = NULL;
+        }
+    }
+}
+void run_tests(void) {
+    printf("Running unit tests...\n");
+    /* Insert unit test code here */
+}
+
+/* Dummy function to display memory and stats (for demonstration) */
+void display_memory_and_stats(const char* action, const char* mode) {
+    /* In production, display actual memory usage and operation counts */
+}
+
+/* --- Script Execution --- */
 TritError execute_command(const char* input, int is_script) {
     char op[10], arg1[256], arg2[256] = "";
     int parsed = sscanf(input, "%9s %255s %255s", op, arg1, arg2);
@@ -879,12 +917,10 @@ TritError run_script(Script* script) {
 }
 
 /* --- Benchmarking Tool --- */
-/* run_benchmarks() executes a series of tests and profiles their execution time */
 void run_benchmarks() {
     printf("Running comprehensive benchmarks...\n");
     int iterations = 10000;
     
-    /* Benchmark Addition */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *b, *result;
@@ -897,7 +933,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Addition");
     
-    /* Benchmark Multiplication */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *b, *result;
@@ -910,7 +945,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Multiplication");
     
-    /* Benchmark Division */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *b;
@@ -925,7 +959,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Division");
     
-    /* Benchmark Power (2^2) */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *b, *result;
@@ -938,7 +971,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Power");
     
-    /* Benchmark Factorial (of 2) */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *a, *result;
@@ -949,7 +981,6 @@ void run_benchmarks() {
     }
     PROFILE_END("Factorial");
     
-    /* Benchmark Binary/Trinary Conversion */
     PROFILE_START
     for (int i = 0; i < iterations; i++) {
         TritBigInt *tri;
@@ -961,33 +992,19 @@ void run_benchmarks() {
     PROFILE_END("Conversion");
 }
 
-/* --- (Arithmetic and Scientific Operations) ---
-   For brevity, full implementations of arithmetic functions (add, sub, mul, div, pow, fact) and
-   scientific functions (sqrt, log3, sin, cos, tan, pi) are assumed to be present as defined in earlier revisions.
-*/
-
-/* --- Utility Functions --- */
-/* (parse_trit_string, tritjs_to_string, tritfloat_to_string, tritcomplex_to_string, etc.) are defined above */
-
-/* --- Binary/Trinary Conversion Functions --- */
-/* (binary_to_trit and trit_to_binary are defined above) */
-
 /* --- Ncurses Interface Integration --- */
-/* This section implements a text–based interface using ncurses. It creates separate windows
-   for status, output, and command input.
-*/
 WINDOW *input_win, *output_win, *status_win;
 
 void init_ncurses_interface() {
-    initscr();              // Initialize ncurses
-    cbreak();               // Disable line buffering
-    noecho();               // Do not echo user input
-    keypad(stdscr, TRUE);   // Enable function and arrow keys
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
-    status_win = newwin(1, cols, 0, 0);         // Status bar at top
-    output_win = newwin(rows - 3, cols, 1, 0);    // Output window in middle
-    input_win = newwin(2, cols, rows - 2, 0);     // Input window at bottom
+    status_win = newwin(1, cols, 0, 0);
+    output_win = newwin(rows - 3, cols, 1, 0);
+    input_win = newwin(2, cols, rows - 2, 0);
     scrollok(output_win, TRUE);
     wrefresh(status_win);
     wrefresh(output_win);
