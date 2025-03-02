@@ -31,10 +31,10 @@
  *
  * == Installation ==
  * 1. Compile using:
- *      gcc -DUSE_READLINE -o tritjs_cisa_optimized_ext TritJS-CISA-Optimized_Extended.cweb -lm -lreadline \
+ *      gcc -DUSE_READLINE -o tritjs_cisa_optimized TritJS-CISA-Optimized.cweb -lm -lreadline \
  *          -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses -lcrypto -lpthread -llua
  * 2. Run with:
- *      ./tritjs_cisa_optimized_ext
+ *      ./tritjs_cisa_optimized
  *
  * == Command Reference ==
  *  add <a> <b>, sub <a> <b>, mul <a> <b>, div <a> <b>, pow <a> <b>, fact <a>
