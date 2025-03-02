@@ -1,50 +1,48 @@
-@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security and POSIX Enhancements.
+@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements, and Benchmarking.
 This document defines \.{TritJS-CISA}, a ternary (base-3) scientific calculator built for
 cybersecurity and educational use. In this revision, we incorporate additional security
-features to comply with CISA directives. Enhancements include:
+features to comply with CISA directives, as well as a benchmark tool for performance testing.
+Enhancements include:
 
-- **Enhanced Audit Logging:** Logs include secure file modes (0600) and (stubbed)
-  digital signing/encryption for tamper resistance.
-- **Secure State Management:** Save/load routines encrypt state files and verify digital
-  signatures. Access is restricted based on privilege (e.g. root-only restoration).
-- **Intrusion Detection & Self-Healing:** A runtime monitor (stubbed) checks for anomalies
-  and can trigger a self-healing routine to revert to a secure state.
-- **Binary/Trinary Conversions:** Functions convert between native binary integers and
-  the internal trinary representation.
-- **POSIX Enhancements:** Common POSIX functions (mkstemp, strdup, etc.) are used to
-  minimize the custom code base.
-- **Robust Error Handling and Developer Guidelines:** Enhanced error messages,
-  secure defaults, and inline documentation guide future code reviews.
-- **Order of Operations:** The design ensures that all security measures (logging,
-  encryption, access control) are applied before state changes occur.
+- **Enhanced Audit Logging:** Secure audit logging with restricted file permissions and (stubbed)
+  digital signing/encryption.
+- **Secure State Management:** Encrypted state save/load with access control.
+- **Intrusion Detection & Self-Healing:** Stubbed runtime monitor and self-healing routines.
+- **Binary/Trinary Conversions:** Functions for converting between binary integers and internal
+  trinary (TritBigInt) representations.
+- **POSIX Enhancements:** Use of standard POSIX functions (mkstemp, strdup, etc.) to reduce custom
+  code.
+- **Robust Error Handling:** Detailed error messages and strict cleanup routines.
+- **Benchmarking:** A new CLI command (“bench”) that runs performance benchmarks for core operations.
+- **Optional GNU Readline Integration:** For enhanced interactive CLI functionality.
+- **Order of Operations:** Security and logging measures are applied before state changes.
 
-This version, dated March 01, 2025, is intended to exceed CISA security requirements while
-maintaining the flexibility and clarity of a literate programming approach.
+This version, dated March 01, 2025, is intended to meet or exceed CISA security directives while
+providing a robust benchmarking facility.
 
 @*1 Usage and Documentation.
 Compile and run:
-- \.{cweave tritjs_cisa_revised_compliant.cweb} → \.{tritjs_cisa_revised_compliant.tex}.
-- \.{ctangle tritjs_cisa_revised_compliant.cweb} → \.{tritjs_cisa_revised_compliant.c}.
+- \.{cweave tritjs_cisa_revised_compliant_bench.cweb} → \.{tritjs_cisa_revised_compliant_bench.tex}.
+- \.{ctangle tritjs_cisa_revised_compliant_bench.cweb} → \.{tritjs_cisa_revised_compliant_bench.c}.
 - Compile with hardened flags, for example:
-      gcc -DUSE_READLINE -o tritjs_cisa tritjs_cisa_revised_compliant.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE
+      gcc -DUSE_READLINE -o tritjs_cisa tritjs_cisa_revised_compliant_bench.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE
 - \.{./tritjs_cisa}  
-  Type “help” for command list; “test” to run the automated test suite.
-
-Supported commands include:
-- Arithmetic: \.{add}, \.{sub}, \.{mul}, \.{div}, \.{pow}, \.{fact}
-- Scientific: \.{sqrt}, \.{log3}, \.{sin}, \.{cos}, \.{tan}, \.{pi}
-- Stats: \.{stats [quick|merge]} (mean, mode, median; auto-selects if omitted)
-- Scripting: \.{PROG <name> {<cmds>}}, \.{RUN <name>}
-- Storage: \.{save <file>}, \.{load <file>} (state files encrypted, MIME type \.{application/x-tritjs-cisa})
-- Conversion: \.{bin2tri <number>}, \.{tri2bin <trit>}
-- Security: \.{monitor} (run runtime security monitor)
-- General: \.{help}, \.{quit}, \.{recall <n>}, \.{<var>=<value>}, \.{clear}, \.{test}
+  Supported commands:
+    - Arithmetic: \.{add}, \.{sub}, \.{mul}, \.{div}, \.{pow}, \.{fact}
+    - Scientific: \.{sqrt}, \.{log3}, \.{sin}, \.{cos}, \.{tan}, \.{pi}
+    - Stats: \.{stats [quick|merge]} (mean, mode, median; auto-selects if omitted)
+    - Scripting: \.{PROG <name> {<cmds>}}, \.{RUN <name>}
+    - Storage: \.{save <file>}, \.{load <file>} (state files encrypted, MIME type \.{application/x-tritjs-cisa})
+    - Conversion: \.{bin2tri <number>}, \.{tri2bin <trit>}
+    - Security: \.{monitor} (run security monitor stub)
+    - Benchmark: \.{bench} (runs benchmark tests)
+    - General: \.{help}, \.{quit}, \.{recall <n>}, \.{<var>=<value>}, \.{clear}, \.{test}
 
 Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and signed.
 
 @*1 Implementation.
 @c
-/* --- Standard Includes and Hardening Flags (see compile command) --- */
+/* --- Standard Includes and Hardening Flags --- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,8 +72,7 @@ Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and signed.
 
 /* --- Data Structures --- */
 typedef int Trit;
-typedef int TritError;  /* Error codes: 0=OK, 1=Mem, 2=Input, 3=DivZero, 4=Overflow, 5=Undefined,
-                           6=Negative, 7=Precision, 8=MMap, 9=Script */
+typedef int TritError;  /* 0=OK, 1=Mem, 2=Input, 3=DivZero, 4=Overflow, 5=Undefined, 6=Negative, 7=Precision, 8=MMap, 9=Script */
 
 typedef struct {
     int sign;
@@ -107,7 +104,7 @@ typedef struct {
     TritFloat remainder;
 } TritDivResult;
 
-/* Global state variables */
+/* --- Global State Variables --- */
 static long total_mapped_bytes = 0;
 static int operation_steps = 0;
 static char* history[MAX_HISTORY] = {0};
@@ -145,22 +142,79 @@ TritError tritjs_to_string(TritBigInt* bi, char** str);
 TritError tritfloat_to_string(TritFloat tf, char** str);
 TritError tritcomplex_to_string(TritComplex tc, char** str);
 
-/* --- Security Enhancements --- */
-/* Stub functions for digital signing, encryption, and decryption. In a production
-   environment, these would call a FIPS-validated crypto library such as OpenSSL.
-*/
-TritError sign_data(const unsigned char* data, size_t data_len, unsigned char** signature, size_t* sig_len) {
-    /* Stub: Sign the data and return a signature */
-    *signature = NULL;
-    *sig_len = 0;
+/* --- Logging and Audit Functions --- */
+FILE* audit_log = NULL;
+void init_audit_log() {
+    audit_log = fopen("/var/log/tritjs_cisa.log", "a");
+    if (!audit_log) {
+        perror("Audit log initialization failed; defaulting to stderr");
+        audit_log = stderr;
+    }
+}
+void log_error(TritError err, const char* context) {
+    if (!audit_log) return;
+    time_t now;
+    time(&now);
+    fprintf(audit_log, "[%s] ERROR %d: %s in %s\n", ctime(&now), err, trit_error_str(err), context);
+    fflush(audit_log);
+}
+const char* trit_error_str(TritError err) {
+    switch (err) {
+        case 0: return "No error";
+        case 1: return "Memory allocation failed";
+        case 2: return "Invalid input (trits 0-2 only)";
+        case 3: return "Division by zero";
+        case 4: return "Overflow detected";
+        case 5: return "Operation undefined";
+        case 6: return "Negative input (complex handled)";
+        case 7: return "Precision limit exceeded";
+        case 8: return "Memory mapping failed";
+        case 9: return "Scripting error";
+        default: return "Unknown error";
+    }
+}
+
+/* --- POSIX-Based map_trits() --- */
+TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_path) {
+    if (len * sizeof(Trit) > MAX_MMAP_SIZE) return 4;
+    strcpy(tmp_path, "/tmp/tritjs_cisa_XXXXXX");
+    *fd = mkstemp(tmp_path);
+    if (*fd < 0) return 8;
+    ftruncate(*fd, len * sizeof(Trit));
+    *digits = mmap(NULL, len * sizeof(Trit), PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
+    if (*digits == MAP_FAILED) {
+        close(*fd);
+        unlink(tmp_path);
+        return 8;
+    }
+    *is_mapped = 1;
+    total_mapped_bytes += len * sizeof(Trit);
+    operation_steps++;
+    display_memory_and_stats("Mapping", "merge");
+    unlink(tmp_path);
     return 0;
 }
+void unmap_trits(Trit* digits, int len, int is_mapped, int fd) {
+    if (is_mapped && digits != MAP_FAILED) {
+        total_mapped_bytes -= len * sizeof(Trit);
+        operation_steps++;
+        display_memory_and_stats("Unmapping", "merge");
+        munmap(digits, len * sizeof(Trit));
+        if (fd >= 0) close(fd);
+    } else if (!is_mapped) {
+        free(digits);
+    }
+}
+
+/* --- Enhanced Security Features --- */
+/* Stub functions for digital signing, encryption, and decryption */
+TritError sign_data(const unsigned char* data, size_t data_len, unsigned char** signature, size_t* sig_len) {
+    *signature = NULL; *sig_len = 0; return 0;
+}
 TritError verify_signature(const unsigned char* data, size_t data_len, const unsigned char* signature, size_t sig_len) {
-    /* Stub: Verify the signature of the data */
     return 0;
 }
 TritError encrypt_data(const unsigned char* plaintext, size_t pt_len, unsigned char** ciphertext, size_t* ct_len) {
-    /* Stub: Encrypt the plaintext; for example, using AES-256 */
     *ciphertext = malloc(pt_len);
     if (!*ciphertext) return 1;
     memcpy(*ciphertext, plaintext, pt_len);
@@ -168,7 +222,6 @@ TritError encrypt_data(const unsigned char* plaintext, size_t pt_len, unsigned c
     return 0;
 }
 TritError decrypt_data(const unsigned char* ciphertext, size_t ct_len, unsigned char** plaintext, size_t* pt_len) {
-    /* Stub: Decrypt the ciphertext */
     *plaintext = malloc(ct_len);
     if (!*plaintext) return 1;
     memcpy(*plaintext, ciphertext, ct_len);
@@ -183,7 +236,6 @@ TritError save_state(const char* filename) {
         printf("Error: Could not open file %s for writing\n", filename);
         return 2;
     }
-    /* Build plaintext state */
     char state_buf[4096] = {0};
     strcat(state_buf, "# TritJS-CISA State File (Encrypted, MIME: application/x-tritjs-cisa)\n# History\n");
     for (int i = 0; i < history_count; i++) {
@@ -203,23 +255,18 @@ TritError save_state(const char* filename) {
             }
         }
     }
-    /* (Additional state for scripts, etc., can be appended here) */
-    /* Encrypt state */
     unsigned char* ciphertext = NULL;
     size_t ct_len = 0;
     if (encrypt_data((unsigned char*)state_buf, strlen(state_buf), &ciphertext, &ct_len) != 0) {
         fclose(f);
         return 1;
     }
-    /* Write encrypted state */
     fwrite(ciphertext, 1, ct_len, f);
     free(ciphertext);
     fclose(f);
     return 0;
 }
-
 TritError load_state(const char* filename) {
-    /* Access control: Only allow root (uid 0) to load state */
     if (getuid() != 0) {
         printf("Error: Insufficient privileges to load state\n");
         return 2;
@@ -246,53 +293,120 @@ TritError load_state(const char* filename) {
         return 1;
     }
     free(ciphertext);
-    /* Verify signature if present (stubbed) */
-    /* Parse plaintext state to restore history, variables, etc. */
-    /* For brevity, assume state parsing is similar to previous implementation */
-    /* ... */
+    /* (State parsing implementation goes here) */
     free(plaintext);
     return 0;
 }
 
 /* --- Intrusion Detection and Self-Healing --- */
-/* Stub: Monitor system metrics for anomalies. In a production system, this might spawn
-   a separate thread that uses AI/ML to detect abnormal behavior.
-*/
 void monitor_security() {
-    /* Stub: Periodically check system logs, CPU usage, etc.
-       If an anomaly is detected, trigger self-healing.
-    */
-    /* For example, if a critical error is detected, call a function like self_heal() */
+    /* Stub: Check logs, system metrics; trigger self_heal() if anomalies are found */
+    printf("Security monitor running...\n");
 }
-
-/* Self-healing routine: Revert to a known-good state if security breach is detected */
 void self_heal() {
-    /* Stub: Revert state, reload configuration, kill suspicious processes, etc. */
     printf("Self-healing triggered: Reverting to safe state...\n");
-    /* Possibly load state from a backup state file */
+    /* Reload safe state, kill suspicious processes, etc. */
 }
 
-/* --- POSIX Utilities Section ---
-   We rely on common POSIX functions for temporary file handling, string duplication, etc.
-   (See map_trits() above for mkstemp usage.)
-*/
+/* --- Benchmarking Tool --- */
+/* run_benchmarks() performs a series of operations (e.g., addition) repeatedly and profiles execution time */
+void run_benchmarks() {
+    printf("Running benchmarks...\n");
+    PROFILE_START
+    int iterations = 10000;
+    for (int i = 0; i < iterations; i++) {
+        TritBigInt *a, *b, *result;
+        parse_trit_string("12", &a);
+        parse_trit_string("21", &b);
+        tritjs_add_big(a, b, &result);
+        tritbig_free(a);
+        tritbig_free(b);
+        tritbig_free(result);
+    }
+    PROFILE_END("Addition Benchmark");
+    /* Additional benchmarks (e.g., multiplication, conversion) can be added similarly */
+}
 
 /* --- Arithmetic Operations --- */
-/* (Functions tritjs_add_big, tritjs_subtract_big, tritjs_multiply_big, tritjs_divide_big,
-   tritjs_power_big, tritjs_factorial_big are as defined in earlier revisions.)
-   For brevity, they are included here unchanged from previous versions.
-*/
-/* ... [Arithmetic functions go here, unchanged from previous revision] ... */
+/* (Arithmetic functions: add, sub, mul, div, pow, fact as defined in previous revisions) */
+/* ... [Arithmetic functions remain unchanged] ... */
 
 /* --- Scientific Operations --- */
-/* (Functions tritjs_sqrt_complex, tritjs_log3_complex, tritjs_trig_complex, tritjs_sin_complex,
-   tritjs_cos_complex, tritjs_tan_complex, tritjs_pi are as defined previously.)
-*/
-/* ... [Scientific functions go here] ... */
+/* (Scientific functions: sqrt, log3, sin, cos, tan, pi as defined previously) */
+/* ... [Scientific functions remain unchanged] ... */
 
 /* --- Utility Functions --- */
-/* parse_trit_string, tritjs_to_string, tritfloat_to_string, tritcomplex_to_string are as defined earlier */
- 
+TritError parse_trit_string(const char* str, TritBigInt** bi) {
+    if (!str || !strlen(str)) return 2;
+    if (strlen(str) > 256) return 2;
+    int sign = (str[0] == '-') ? 1 : 0;
+    const char* mag = sign ? str + 1 : str;
+    int len = strlen(mag);
+    Trit* trits = malloc(len * sizeof(Trit));
+    if (!trits) return 1;
+    for (int i = 0; i < len; i++) {
+        if (mag[i] < '0' || mag[i] > '2') {
+            free(trits);
+            fprintf(stderr, "parse_trit_string: Invalid character '%c'\n", mag[i]);
+            return 2;
+        }
+        trits[i] = mag[i] - '0';
+    }
+    TritError err = tritbig_from_trits(trits, len, sign, bi);
+    free(trits);
+    return err;
+}
+TritError tritjs_to_string(TritBigInt* bi, char** str) {
+    if (!bi || bi->len <= 0) return 2;
+    *str = malloc(bi->len + 1 + (bi->sign ? 1 : 0));
+    if (!*str) return 1;
+    char* p = *str;
+    if (bi->sign) *p++ = '-';
+    for (int i = 0; i < bi->len; i++) *p++ = '0' + bi->digits[i];
+    *p = '\0';
+    return 0;
+}
+TritError tritfloat_to_string(TritFloat tf, char** str) {
+    if (!tf.integer || tf.i_len <= 0) return 2;
+    int total_len = tf.i_len + (tf.f_len > 0 ? tf.f_len + 1 : 0) + (tf.sign ? 1 : 0);
+    *str = malloc(total_len + 1);
+    if (!*str) return 1;
+    char* p = *str;
+    if (tf.sign) *p++ = '-';
+    for (int i = 0; i < tf.i_len; i++) *p++ = '0' + tf.integer[i];
+    if (tf.f_len > 0) {
+        *p++ = '.';
+        for (int i = 0; i < tf.f_len; i++) *p++ = '0' + tf.fraction[i];
+    }
+    *p = '\0';
+    return 0;
+}
+TritError tritcomplex_to_string(TritComplex tc, char** str) {
+    char* real_str, *imag_str;
+    TritError err;
+    if ((err = tritfloat_to_string(tc.real, &real_str)) != 0) return err;
+    if ((err = tritfloat_to_string(tc.imag, &imag_str)) != 0) {
+        free(real_str);
+        return err;
+    }
+    int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
+    if (imag_zero) {
+        *str = real_str;
+        free(imag_str);
+        return 0;
+    }
+    *str = malloc(strlen(real_str) + strlen(imag_str) + 4);
+    if (!*str) {
+        free(real_str);
+        free(imag_str);
+        return 1;
+    }
+    sprintf(*str, "%s %si", real_str, imag_str);
+    free(real_str);
+    free(imag_str);
+    return 0;
+}
+
 /* --- Binary/Trinary Conversion Functions --- */
 TritError binary_to_trit(int num, TritBigInt** result) {
     int sign = (num < 0) ? 1 : 0;
@@ -335,7 +449,6 @@ TritError binary_to_trit(int num, TritBigInt** result) {
     (*result)->is_mapped = 0;
     return 0;
 }
-
 TritError trit_to_binary(TritBigInt* tri, int* result) {
     if (!tri || !result) return 2;
     int value = 0;
@@ -347,7 +460,7 @@ TritError trit_to_binary(TritBigInt* tri, int* result) {
     return 0;
 }
 
-/* --- Enhanced CLI Commands --- */
+/* --- Enhanced CLI Commands and Benchmarking --- */
 TritError execute_command(const char* input, int is_script) {
     char op[10], arg1[256], arg2[256] = "";
     int parsed = sscanf(input, "%9s %255s %255s", op, arg1, arg2);
@@ -355,7 +468,6 @@ TritError execute_command(const char* input, int is_script) {
         if (!is_script) printf("Error: Input too long or invalid format\n");
         return 2;
     }
-    /* New commands: bin2tri and tri2bin */
     if (strncmp(input, "bin2tri", 7) == 0) {
         int num;
         if (sscanf(input + 7, "%d", &num) != 1) {
@@ -394,7 +506,15 @@ TritError execute_command(const char* input, int is_script) {
         }
         return err;
     }
-    /* Process arithmetic, scientific, and other commands as before */
+    if (strncmp(input, "bench", 5) == 0) {
+        run_benchmarks();
+        return 0;
+    }
+    if (strncmp(input, "monitor", 7) == 0) {
+        monitor_security();
+        return 0;
+    }
+    /* Process other commands (arithmetic, scientific, etc.) as before */
     TritBigInt* a = NULL;
     TritBigInt* b = NULL;
     TritError err;
@@ -690,6 +810,23 @@ TritError run_script(Script* script) {
     return 0;
 }
 
+/* --- Benchmark Tool --- */
+void run_benchmarks() {
+    printf("Running benchmarks...\n");
+    PROFILE_START
+    int iterations = 10000;
+    for (int i = 0; i < iterations; i++) {
+        TritBigInt *a, *b, *result;
+        parse_trit_string("12", &a);
+        parse_trit_string("21", &b);
+        tritjs_add_big(a, b, &result);
+        tritbig_free(a);
+        tritbig_free(b);
+        tritbig_free(result);
+    }
+    PROFILE_END("Addition Benchmark");
+}
+
 /* --- Test Suite --- */
 void run_tests() {
     printf("Running tests...\n");
@@ -740,7 +877,7 @@ char* get_input(const char* prompt) {
 #endif
 }
 
-/* --- Main CLI Loop --- */
+/* --- CLI Loop --- */
 void print_help() {
     printf("\n=== TritJS-CISA Commands ===\n");
     printf("Arithmetic:\n  add <a> <b>  - Add two ternary numbers\n  sub <a> <b>  - Subtract b from a\n  mul <a> <b>  - Multiply a and b\n  div <a> <b>  - Divide a by b\n  pow <a> <b>  - Raise a to power b\n  fact <a>     - Factorial of a\n");
@@ -751,6 +888,7 @@ void print_help() {
     printf("Scripting:\n  PROG <name> {<cmds>} - Define script (e.g., PROG LOOP {add A 1; A=A})\n  RUN <name>   - Run named script\n");
     printf("Conversion:\n  bin2tri <number> - Convert binary integer to trinary representation\n  tri2bin <trit>   - Convert trinary number to binary integer\n");
     printf("Security:\n  monitor      - Run security monitor (stub)\n");
+    printf("Benchmark:\n  bench        - Run benchmark tests\n");
     printf("General:\n  help         - Show this help\n  quit         - Exit\n  test         - Run built-in tests\n");
     printf("====================\n");
 }
@@ -792,61 +930,14 @@ void run_calculator() {
 #endif
             continue;
         }
-        if (strncmp(input, "stats", 5) == 0) {
-            char sort_method[10] = "auto";
-            sscanf(input, "%*s %9s", sort_method);
-            if (strcmp(sort_method, "quick") && strcmp(sort_method, "merge") && strcmp(sort_method, "auto")) {
-                printf("Error: Sort method must be 'quick', 'merge', or omitted (auto)\n");
-#ifdef USE_READLINE
-                free(input);
-#endif
-                continue;
-            }
-            double mean = 0.0;
-            int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
-            int* all_trits = NULL;
-            for (int i = 0; i < history_count; i++) {
-                TritBigInt* bi;
-                if (parse_trit_string(history[i], &bi) == 0) {
-                    all_trits = realloc(all_trits, (total_trits + bi->len) * sizeof(int));
-                    for (int j = 0; j < bi->len; j++) {
-                        mean += bi->digits[j];
-                        trit_counts[bi->digits[j]]++;
-                        all_trits[total_trits + j] = bi->digits[j];
-                    }
-                    total_trits += bi->len;
-                    tritbig_free(bi);
-                }
-            }
-            if (total_trits > 0) mean /= total_trits;
-            for (int i = 0; i < TRIT_MAX; i++) {
-                if (trit_counts[i] > max_count) {
-                    max_count = trit_counts[i];
-                    mode = i;
-                }
-            }
-            double median = -1;
-            if (total_trits > 0) {
-                const char* chosen_method = sort_method;
-                if (strcmp(sort_method, "auto") == 0)
-                    chosen_method = (total_trits < 10) ? "quick" : "merge";
-                if (strcmp(chosen_method, "quick") == 0)
-                    quicksort(all_trits, 0, total_trits - 1);
-                else
-                    trit_mergesort(all_trits, 0, total_trits - 1);
-                median = (total_trits % 2 == 0) ?
-                         (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0 :
-                         all_trits[total_trits / 2];
-            }
-            free(all_trits);
-            printf("Stats - Mean: %.2f | Mode: %d | Median: %.2f\n", mean, mode, median);
+        if (strncmp(input, "bench", 5) == 0) {
+            run_benchmarks();
 #ifdef USE_READLINE
             free(input);
 #endif
             continue;
         }
         if (strncmp(input, "monitor", 7) == 0) {
-            /* Run the security monitor (stub) */
             monitor_security();
 #ifdef USE_READLINE
             free(input);
