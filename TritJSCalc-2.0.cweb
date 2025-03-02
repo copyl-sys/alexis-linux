@@ -1,40 +1,37 @@
-@* TritJS-CISA: Enhanced Ternary Cybersecurity Tool for CISA.
-This document defines \.{TritJS-CISA}, an advanced ternary (base-3) cybersecurity tool
-designed for the Cybersecurity and Infrastructure Security Agency (CISA) to protect critical
-infrastructure. It surpasses the TI-82 with ternary statistics optimized via AI-driven sorting,
-scripting, encrypted save/load, real-time networking, and certification testing in an
-ASCII-only CLI. Built in C as a \.{.cweb} literate program, it emulates ternary computation
-on binary hardware, enhancing security, scalability, and education. Enhancements include:
-
-- **Scalable Memory**: Dynamic allocation up to 100MB, 10,000 history entries.
-- **Security**: AES-256 encrypted storage and logs.
-- **Real-Time**: Socket-based network input for live data.
+@* TritJS-CISA: A Ternary Calculator with AI-Driven Stats, Scripting, and Save/Load.
+This document defines \.{TritJS-CISA}, an advanced ternary (base-3) scientific calculator
+designed for the Cybersecurity and Infrastructure Security Agency (CISA), surpassing the
+TI-82 with ternary statistics (mean, mode, median) optimized via AI-driven sorting, basic
+scripting, and save/load capabilities in an ASCII-only interface. Built in C and shipped
+as a \.{.cweb} literate program, it emulates ternary computation on binary hardware,
+optimized for cybersecurity tasks and educational use. Enhancements include:
+ 
+- **Memory-Mapped Files**: \.{mmap} for trit arrays, visualized with stats.
+- **Security Hardening**: Audit logging to \.{/var/log/tritjs_cisa.log} and memory safety.
 - **Complex Arithmetic**: \.{TritFloat}, \.{TritBigInt}, \.{TritComplex}.
 - **Scientific Functions**: Exponentiation, roots, logarithms, trigonometry, factorials.
-- **CLI**: History, variables, stats, scripting, save/load, testing, and learning.
+- **Interactive CLI**: History, variables (A-Z), AI-optimized stats, scripting, and save/load.
 - **MIME Type**: \.{application/x-tritjs-cisa} for \.{.trit} files.
 
-Version: March 01, 2025, with persistent storage and CISA enhancements.
+This version, dated March 01, 2025, adds persistent storage.
 
 @*1 Usage and Documentation.
 Compile and run:
 - \.{cweave tritjs_cisa.cweb} → \.{tritjs_cisa.tex}.
 - \.{ctangle tritjs_cisa.cweb} → \.{tritjs_cisa.c}.
-- \.{gcc -o tritjs_cisa tritjs_cisa.c -lm -lpthread -lcrypto}.
+- \.{gcc -o tritjs_cisa tritjs_cisa.c -lm}.
 - \.{./tritjs_cisa}.
 
-Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{save work.trit secret}.
+Commands: \.{<operation> <arg1> [arg2]}, e.g., \.{add 12 2}, \.{A=12}, \.{save work.trit}.
 Operations:
-- Arithmetic: \.{add/a}, \.{sub/s}, \.{mul/m}, \.{div/d}, \.{pow/p}, \.{fact/f}
+- Arithmetic: \.{add}, \.{sub}, \.{mul}, \.{div}, \.{pow}, \.{fact}
 - Scientific: \.{sqrt}, \.{log3}, \.{sin}, \.{cos}, \.{tan}, \.{pi}
-- Stats: \.{stats [quick|merge]} (auto-selects if unspecified)
-- Scripting: \.{PROG <name> { <cmds> }}, \.{RUN/r <name>}
-- Storage: \.{save/sv <file> <key>}, \.{load/ld <file> <key>}, \.{export/json <file>}
-- Networking: \.{NET <ip> <port>}
-- Education: \.{LEARN <topic>}, \.{TEST <week>}, \.{CHECK <qnum> <ans>}, \.{SCORE}
-- General: \.{help/h}, \.{quit/q}, \.{recall/rc <n>}, \.{clear/cl}, \.{<var>=<value>}
+- Stats: \.{stats [quick|merge]} (mean, mode, median; auto-selects if omitted)
+- Scripting: \.{PROG <name> {<cmds>}}, \.{RUN <name>}
+- Storage: \.{save <file>}, \.{load <file>} (uses \.{application/x-tritjs-cisa} MIME type)
+- General: \.{help}, \.{quit}, \.{recall <n>}, \.{<var>=<value>}, \.{clear}
 
-Inputs are base-3 (trits: 0, 1, 2). Save/load uses encrypted \.{.trit} files.
+Inputs are base-3 (trits: 0, 1, 2). Save/load uses \.{.trit} files.
 
 @*1 Implementation.
 @c
@@ -46,61 +43,50 @@ Inputs are base-3 (trits: 0, 1, 2). Save/load uses encrypted \.{.trit} files.
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
-#include <pthread.h>
-#include <openssl/aes.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <limits.h>    %% Added for ULONG_MAX
 
 #define TRIT_MAX 3
-#define MAX_MMAP_SIZE (100 * 1024 * 1024) /* 100MB */
+#define MAX_MMAP_SIZE (1024 * 1024)
 #define MAX_DISPLAY_WIDTH 50
-#define MAX_HISTORY 10000
+#define MAX_HISTORY 10
 #define MAX_VAR_NAME 2
-#define MAX_SCRIPT_NAME 20
-#define MAX_SCRIPT_CMDS 1000
+#define MAX_SCRIPT_NAME 10
+#define MAX_SCRIPT_CMDS 50
 #define MAX_FILENAME 256
-#define MAX_QUESTIONS 40
-#define QUESTIONS_PER_WEEK 5
-#define AES_KEYLEN 32 /* AES-256 */
-#define MAX_INPUT 256
 
+/* Data Structures */
 typedef int Trit;
+typedef int TritError;  /* Assuming TritError is an int */
+
 typedef struct {
- int sign;
- Trit* digits;
- int len;
- int is_mapped;
- int fd;
- char tmp_path[32];
+    int sign;
+    Trit* digits;
+    int len;
+    int is_mapped;
+    int fd;
+    char tmp_path[32];
 } TritBigInt;
 
 typedef struct {
- int sign;
- Trit* integer;
- Trit* fraction;
- int i_len, f_len;
- int i_mapped, f_mapped;
- int i_fd, f_fd;
- char i_tmp_path[32];
- char f_tmp_path[32];
+    int sign;
+    Trit* integer;
+    Trit* fraction;
+    int i_len, f_len;
+    int i_mapped, f_mapped;
+    int i_fd, f_fd;
+    char i_tmp_path[32];
+    char f_tmp_path[32];
 } TritFloat;
 
 typedef struct {
- TritFloat real;
- TritFloat imag;
+    TritFloat real;
+    TritFloat imag;
 } TritComplex;
 
 typedef struct {
- TritFloat quotient;
- TritFloat remainder;
+    TritFloat quotient;
+    TritFloat remainder;
 } TritDivResult;
-
-typedef struct {
- char name[MAX_SCRIPT_NAME];
- char commands[MAX_SCRIPT_CMDS][MAX_INPUT];
- int cmd_count;
-} Script;
 
 /* Global state */
 static long total_mapped_bytes = 0;
@@ -108,347 +94,261 @@ static int operation_steps = 0;
 static char* history[MAX_HISTORY] = {0};
 static int history_count = 0;
 static TritBigInt* variables[26] = {0};
-static Script scripts[100] = {0};
+
+typedef struct {
+    char name[MAX_SCRIPT_NAME];
+    char commands[MAX_SCRIPT_CMDS][256];
+    int cmd_count;
+} Script;
+static Script scripts[10] = {0};
 static int script_count = 0;
-static int test_active = 0;
-static int test_answers[MAX_QUESTIONS] = {0};
-static int test_score = 0;
-static int questions_answered = 0;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Function Prototypes */
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
-TritError save_state_encrypted(const char* filename, const char* key);
-TritError load_state_encrypted(const char* filename, const char* key);
-TritError net_listen(const char* ip, int port);
-TritError export_json(const char* filename);
-void display_test_question(int qnum);
-int check_test_answer(int qnum, int user_answer);
-void learn_topic(const char* topic);
+TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
+TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
+TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision);
+TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** result);
+TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result);
+TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_sin_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result);
+TritError tritjs_pi(int* len, Trit** pi);
+void cleanup_div(TritBigInt* temp_rem, TritFloat* dividend, TritFloat* divisor, TritDivResult* result);
+TritError parse_trit_string(const char* str, TritBigInt** bi);
+TritError tritbig_from_trits(Trit* trits, int len, int sign, TritBigInt** bi);
+void tritbig_free(TritBigInt* bi);
+TritError tritfloat_from_bigint(TritBigInt* bi, TritFloat* tf);
+void tritfloat_free(TritFloat tf);
+TritError tritjs_to_string(TritBigInt* bi, char** str);
+TritError tritfloat_to_string(TritFloat tf, char** str);
+TritError tritcomplex_to_string(TritComplex tc, char** str);
 
-/* Quicksort */
+/* Quicksort implementation */
 void quicksort(int* arr, int low, int high) {
- if (low < high) {
- int pivot = arr[high];
- int i = low - 1;
- for (int j = low; j < high; j++) {
- if (arr[j] <= pivot) {
- i++;
- int temp = arr[i];
- arr[i] = arr[j];
- arr[j] = temp;
- }
- }
- int temp = arr[i + 1];
- arr[i + 1] = arr[high];
- arr[high] = temp;
- int pi = i + 1;
- quicksort(arr, low, pi - 1);
- quicksort(arr, pi + 1, high);
- }
+    if (low < high) {
+        int pivot = arr[high];
+        int i = low - 1;
+        for (int j = low; j < high; j++) {
+            if (arr[j] <= pivot) {
+                i++;
+                int temp = arr[i];
+                arr[i] = arr[j];
+                arr[j] = temp;
+            }
+        }
+        int temp = arr[i + 1];
+        arr[i + 1] = arr[high];
+        arr[high] = temp;
+        int pi = i + 1;
+        quicksort(arr, low, pi - 1);
+        quicksort(arr, pi + 1, high);
+    }
 }
 
-/* Mergesort */
-void merge(int* arr, int l, int m, int r) {
- int n1 = m - l + 1, n2 = r - m;
- int* L = malloc(n1 * sizeof(int));
- int* R = malloc(n2 * sizeof(int));
- if (!L || !R) {
- free(L); free(R);
- log_error(TRIT_ERR_MEM, "merge");
- return;
- }
- for (int i = 0; i < n1; i++) L[i] = arr[l + i];
- for (int j = 0; j < n2; j++) R[j] = arr[m + 1 + j];
- int i = 0, j = 0, k = l;
- while (i < n1 && j < n2) {
- if (L[i] <= R[j]) arr[k++] = L[i++];
- else arr[k++] = R[j++];
- }
- while (i < n1) arr[k++] = L[i++];
- while (j < n2) arr[k++] = R[j++];
- free(L);
- free(R);
+/* Trit-specific Mergesort implementation */
+void trit_merge(int* arr, int l, int m, int r) {
+    int n1 = m - l + 1, n2 = r - m;
+    int* L = malloc(n1 * sizeof(int));
+    int* R = malloc(n2 * sizeof(int));
+    for (int i = 0; i < n1; i++) L[i] = arr[l + i];
+    for (int j = 0; j < n2; j++) R[j] = arr[m + 1 + j];
+    int i = 0, j = 0, k = l;
+    while (i < n1 && j < n2) {
+        if (L[i] <= R[j]) arr[k++] = L[i++];
+        else arr[k++] = R[j++];
+    }
+    while (i < n1) arr[k++] = L[i++];
+    while (j < n2) arr[k++] = R[j++];
+    free(L);
+    free(R);
 }
 
-void mergesort(int* arr, int l, int r) {
- if (l < r) {
- int m = l + (r - l) / 2;
- mergesort(arr, l, m);
- mergesort(arr, m + 1, r);
- merge(arr, l, m, r);
- }
+void trit_mergesort(int* arr, int l, int r) {
+    if (l < r) {
+        int m = l + (r - l) / 2;
+        trit_mergesort(arr, l, m);
+        trit_mergesort(arr, m + 1, r);
+        trit_merge(arr, l, m, r);
+    }
 }
 
 void display_memory_and_stats(const char* operation, const char* sort_method) {
- pthread_mutex_lock(&mutex);
- int bar_length = (int)((total_mapped_bytes * MAX_DISPLAY_WIDTH) / MAX_MMAP_SIZE);
- if (bar_length > MAX_DISPLAY_WIDTH) bar_length = MAX_DISPLAY_WIDTH;
+    int bar_length = (int)((total_mapped_bytes * MAX_DISPLAY_WIDTH) / MAX_MMAP_SIZE);
+    if (bar_length > MAX_DISPLAY_WIDTH) bar_length = MAX_DISPLAY_WIDTH;
 
- double mean = 0.0;
- int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
- int* all_trits = NULL;
- for (int i = 0; i < history_count; i++) {
- TritBigInt* bi;
- if (parse_trit_string(history[i], &bi) == TRIT_OK) {
- all_trits = realloc(all_trits, (total_trits + bi->len) * sizeof(int));
- if (!all_trits) {
- tritbig_free(bi);
- log_error(TRIT_ERR_MEM, "display_memory_and_stats");
- pthread_mutex_unlock(&mutex);
- return;
- }
- for (int j = 0; j < bi->len; j++) {
- mean += bi->digits[j];
- trit_counts[bi->digits[j]]++;
- all_trits[total_trits + j] = bi->digits[j];
- }
- total_trits += bi->len;
- tritbig_free(bi);
- }
- }
- if (total_trits > 0) mean /= total_trits;
- for (int i = 0; i < TRIT_MAX; i++) {
- if (trit_counts[i] > max_count) {
- max_count = trit_counts[i];
- mode = i;
- }
- }
- double median = -1;
- if (total_trits > 0) {
- if (strcmp(sort_method, "quick") == 0) {
- quicksort(all_trits, 0, total_trits - 1);
- } else {
- mergesort(all_trits, 0, total_trits - 1);
- }
- if (total_trits % 2 == 0) {
- median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
- } else {
- median = all_trits[total_trits / 2];
- }
- }
- free(all_trits);
+    double mean = 0.0;
+    int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
+    int* all_trits = NULL;
+    for (int i = 0; i < history_count; i++) {
+        TritBigInt* bi;
+        if (parse_trit_string(history[i], &bi) == TRIT_OK) {
+            all_trits = realloc(all_trits, (total_trits + bi->len) * sizeof(int));
+            for (int j = 0; j < bi->len; j++) {
+                mean += bi->digits[j];
+                trit_counts[bi->digits[j]]++;
+                all_trits[total_trits + j] = bi->digits[j];
+            }
+            total_trits += bi->len;
+            tritbig_free(bi);
+        }
+    }
+    if (total_trits > 0) mean /= total_trits;
+    for (int i = 0; i < TRIT_MAX; i++) {
+        if (trit_counts[i] > max_count) {
+            max_count = trit_counts[i];
+            mode = i;
+        }
+    }
+    double median = -1;
+    if (total_trits > 0) {
+        if (strcmp(sort_method, "quick") == 0) {
+            quicksort(all_trits, 0, total_trits - 1);
+        } else {
+            trit_mergesort(all_trits, 0, total_trits - 1);
+        }
+        if (total_trits % 2 == 0) {
+            median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
+        } else {
+            median = all_trits[total_trits / 2];
+        }
+    }
+    free(all_trits);
 
- printf("\033[2K\033[1A");
- printf("Mem: [");
- for (int i = 0; i < MAX_DISPLAY_WIDTH; i++) printf(i < bar_length ? "█" : " ");
- printf("] %ld b | Steps: %d | Mean: %.2f | Mode: %d | Median: %.2f | Sort: %s | Op: %s\n",
- total_mapped_bytes, operation_steps, mean, mode >= 0 ? mode : -1, median >= 0 ? median : -1, sort_method, operation);
- fflush(stdout);
- pthread_mutex_unlock(&mutex);
+    printf("\033[2K\033[1A");
+    printf("Mem: [");
+    for (int i = 0; i < MAX_DISPLAY_WIDTH; i++) printf(i < bar_length ? "█" : " ");
+    printf("] %ld b | Steps: %d | Mean: %.2f | Mode: %d | Median: %.2f | Sort: %s | Op: %s\n",
+           total_mapped_bytes, operation_steps, mean, mode >= 0 ? mode : -1, median >= 0 ? median : -1, sort_method, operation);
+    fflush(stdout);
 }
 
 void add_to_history(const char* result_str) {
- pthread_mutex_lock(&mutex);
- if (history_count < MAX_HISTORY) {
- history[history_count] = strdup(result_str);
- if (!history[history_count]) log_error(TRIT_ERR_MEM, "add_to_history");
- else history_count++;
- } else {
- free(history[0]);
- memmove(history, history + 1, (MAX_HISTORY - 1) * sizeof(char*));
- history[MAX_HISTORY - 1] = strdup(result_str);
- if (!history[MAX_HISTORY - 1]) log_error(TRIT_ERR_MEM, "add_to_history");
- }
- pthread_mutex_unlock(&mutex);
+    if (history_count < MAX_HISTORY) {
+        history[history_count] = strdup(result_str);
+        history_count++;
+    } else {
+        free(history[0]);
+        memmove(history, history + 1, (MAX_HISTORY - 1) * sizeof(char*));
+        history[MAX_HISTORY - 1] = strdup(result_str);
+    }
 }
 
 char* recall_history(int index) {
- pthread_mutex_lock(&mutex);
- char* result = (index < 0 || index >= history_count) ? NULL : strdup(history[history_count - 1 - index]);
- pthread_mutex_unlock(&mutex);
- return result;
+    if (index < 0 || index >= history_count) return NULL;
+    return history[history_count - 1 - index];
 }
 
 void store_variable(const char* name, TritBigInt* value) {
- pthread_mutex_lock(&mutex);
- if (strlen(name) != 1 || name[0] < 'A' || name[0] > 'Z') {
- pthread_mutex_unlock(&mutex);
- return;
- }
- int idx = name[0] - 'A';
- if (variables[idx]) tritbig_free(variables[idx]);
- variables[idx] = value;
- pthread_mutex_unlock(&mutex);
+    if (strlen(name) != 1 || name[0] < 'A' || name[0] > 'Z') return;
+    int idx = name[0] - 'A';
+    if (variables[idx]) tritbig_free(variables[idx]);
+    variables[idx] = value;
 }
 
 TritBigInt* recall_variable(const char* name) {
- pthread_mutex_lock(&mutex);
- TritBigInt* result = (strlen(name) != 1 || name[0] < 'A' || name[0] > 'Z') ? NULL : variables[name[0] - 'A'];
- pthread_mutex_unlock(&mutex);
- return result;
+    if (strlen(name) != 1 || name[0] < 'A' || name[0] > 'Z') return NULL;
+    return variables[name[0] - 'A'];
 }
 
 void clear_history_and_vars() {
- pthread_mutex_lock(&mutex);
- for (int i = 0; i < history_count; i++) {
- free(history[i]);
- history[i] = NULL;
- }
- history_count = 0;
- for (int i = 0; i < 26; i++) {
- if (variables[i]) {
- tritbig_free(variables[i]);
- variables[i] = NULL;
- }
- }
- for (int i = 0; i < script_count; i++) {
- scripts[i].cmd_count = 0;
- }
- script_count = 0;
- test_active = 0;
- test_score = 0;
- questions_answered = 0;
- memset(test_answers, 0, sizeof(test_answers));
- pthread_mutex_unlock(&mutex);
+    for (int i = 0; i < history_count; i++) {
+        free(history[i]);
+        history[i] = NULL;
+    }
+    history_count = 0;
+    for (int i = 0; i < 26; i++) {
+        if (variables[i]) {
+            tritbig_free(variables[i]);
+            variables[i] = NULL;
+        }
+    }
+    for (int i = 0; i < script_count; i++) {
+        scripts[i].cmd_count = 0;
+    }
+    script_count = 0;
 }
 
-TritError save_state_encrypted(const char* filename, const char* key) {
- FILE* f = fopen(filename, "wb");
- if (!f) {
- log_error(TRIT_ERR_INPUT, "save_state_encrypted: file open");
- return TRIT_ERR_INPUT;
- }
+TritError save_state(const char* filename) {
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        printf("Error: Could not open file %s for writing\n", filename);
+        return TRIT_ERR_INPUT;
+    }
 
- AES_KEY aes_key;
- unsigned char iv[AES_BLOCK_SIZE] = "TritJS-CISA-IV";
- if (AES_set_encrypt_key((unsigned char*)key, AES_KEYLEN * 8, &aes_key) < 0) {
- fclose(f);
- log_error(TRIT_ERR_INPUT, "save_state_encrypted: AES key");
- return TRIT_ERR_INPUT;
- }
+    fprintf(f, "# TritJS-CISA State File (MIME: application/x-tritjs-cisa)\n");
+    fprintf(f, "# History\n");
+    for (int i = 0; i < history_count; i++) {
+        fprintf(f, "H: %s\n", history[i]);
+    }
 
- char buffer[1024 * 1024]; /* 1MB buffer */
- int len = snprintf(buffer, sizeof(buffer), "# TritJS-CISA Encrypted State\n# History\n");
- for (int i = 0; i < history_count; i++) {
- len += snprintf(buffer + len, sizeof(buffer) - len, "H: %s\n", history[i]);
- }
- len += snprintf(buffer + len, sizeof(buffer) - len, "# Variables\n");
- for (int i = 0; i < 26; i++) {
- if (variables[i]) {
- char* str;
- if (tritjs_to_string(variables[i], &str) == TRIT_OK) {
- len += snprintf(buffer + len, sizeof(buffer) - len, "V: %c=%s\n", 'A' + i, str);
- free(str);
- }
- }
- }
- len += snprintf(buffer + len, sizeof(buffer) - len, "# Scripts\n");
- for (int i = 0; i < script_count; i++) {
- len += snprintf(buffer + len, sizeof(buffer) - len, "S: %s\n", scripts[i].name);
- for (int j = 0; j < scripts[i].cmd_count; j++) {
- len += snprintf(buffer + len, sizeof(buffer) - len, "C: %s\n", scripts[i].commands[j]);
- }
- }
- len += snprintf(buffer + len, sizeof(buffer) - len, "# Test\nT: %d %d %d\n", test_active, test_score, questions_answered);
- for (int i = 0; i < MAX_QUESTIONS; i++) {
- if (test_answers[i]) {
- len += snprintf(buffer + len, sizeof(buffer) - len, "A: %d %d\n", i, test_answers[i]);
- }
- }
+    fprintf(f, "# Variables\n");
+    for (int i = 0; i < 26; i++) {
+        if (variables[i]) {
+            char* str;
+            if (tritjs_to_string(variables[i], &str) == TRIT_OK) {
+                fprintf(f, "V: %c=%s\n", 'A' + i, str);
+                free(str);
+            }
+        }
+    }
 
- if (len >= sizeof(buffer)) {
- fclose(f);
- log_error(TRIT_ERR_OVERFLOW, "save_state_encrypted: buffer overflow");
- return TRIT_ERR_OVERFLOW;
- }
+    fprintf(f, "# Scripts\n");
+    for (int i = 0; i < script_count; i++) {
+        fprintf(f, "S: %s\n", scripts[i].name);
+        for (int j = 0; j < scripts[i].cmd_count; j++) {
+            fprintf(f, "C: %s\n", scripts[i].commands[j]);
+        }
+    }
 
- unsigned char* encrypted = malloc(((len + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE);
- if (!encrypted) {
- fclose(f);
- log_error(TRIT_ERR_MEM, "save_state_encrypted: encrypt alloc");
- return TRIT_ERR_MEM;
- }
- int outlen = 0;
- AES_cbc_encrypt((unsigned char*)buffer, encrypted, len, &aes_key, iv, AES_ENCRYPT);
- fwrite(encrypted, 1, ((len + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE, f);
- free(encrypted);
- fclose(f);
- return TRIT_OK;
+    fclose(f);
+    return TRIT_OK;
 }
 
-TritError load_state_encrypted(const char* filename, const char* key) {
- FILE* f = fopen(filename, "rb");
- if (!f) {
- log_error(TRIT_ERR_INPUT, "load_state_encrypted: file open");
- return TRIT_ERR_INPUT;
- }
+TritError load_state(const char* filename) {
+    FILE* f = fopen(filename, "r");
+    if (!f) {
+        printf("Error: Could not open file %s for reading\n", filename);
+        return TRIT_ERR_INPUT;
+    }
 
- AES_KEY aes_key;
- unsigned char iv[AES_BLOCK_SIZE] = "TritJS-CISA-IV";
- if (AES_set_decrypt_key((unsigned char*)key, AES_KEYLEN * 8, &aes_key) < 0) {
- fclose(f);
- log_error(TRIT_ERR_INPUT, "load_state_encrypted: AES key");
- return TRIT_ERR_INPUT;
- }
+    clear_history_and_vars();
+    char line[256];
+    Script* current_script = NULL;
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\n")] = 0;
+        if (line[0] == '#') continue;
 
- fseek(f, 0, SEEK_END);
- long fsize = ftell(f);
- if (fsize > MAX_MMAP_SIZE) {
- fclose(f);
- log_error(TRIT_ERR_OVERFLOW, "load_state_encrypted: file too large");
- return TRIT_ERR_OVERFLOW;
- }
- fseek(f, 0, SEEK_SET);
- unsigned char* encrypted = malloc(fsize);
- if (!encrypted) {
- fclose(f);
- log_error(TRIT_ERR_MEM, "load_state_encrypted: decrypt alloc");
- return TRIT_ERR_MEM;
- }
- fread(encrypted, 1, fsize, f);
- fclose(f);
+        if (strncmp(line, "H: ", 3) == 0 && history_count < MAX_HISTORY) {
+            history[history_count] = strdup(line + 3);
+            history_count++;
+        } else if (strncmp(line, "V: ", 3) == 0) {
+            char var_name[2] = {line[3], '\0'};
+            char* value = line + 5;
+            TritBigInt* bi;
+            if (parse_trit_string(value, &bi) == TRIT_OK) {
+                store_variable(var_name, bi);
+            }
+        } else if (strncmp(line, "S: ", 3) == 0 && script_count < 10) {
+            current_script = &scripts[script_count++];
+            strncpy(current_script->name, line + 3, MAX_SCRIPT_NAME - 1);
+            current_script->cmd_count = 0;
+        } else if (strncmp(line, "C: ", 3) == 0 && current_script && current_script->cmd_count < MAX_SCRIPT_CMDS) {
+            strncpy(current_script->commands[current_script->cmd_count++], line + 3, 255);
+        }
+    }
 
- char* buffer = malloc(fsize);
- if (!buffer) {
- free(encrypted);
- log_error(TRIT_ERR_MEM, "load_state_encrypted: buffer alloc");
- return TRIT_ERR_MEM;
- }
- AES_cbc_encrypt(encrypted, (unsigned char*)buffer, fsize, &aes_key, iv, AES_DECRYPT);
- free(encrypted);
-
- clear_history_and_vars();
- char* line = strtok(buffer, "\n");
- Script* current_script = NULL;
- while (line) {
- if (line[0] == '#') {
- line = strtok(NULL, "\n");
- continue;
- }
- if (strncmp(line, "H: ", 3) == 0 && history_count < MAX_HISTORY) {
- history[history_count++] = strdup(line + 3);
- } else if (strncmp(line, "V: ", 3) == 0) {
- char var_name[2] = {line[3], '\0'};
- char* value = line + 5;
- TritBigInt* bi;
- if (parse_trit_string(value, &bi) == TRIT_OK) store_variable(var_name, bi);
- } else if (strncmp(line, "S: ", 3) == 0 && script_count < 100) {
- current_script = &scripts[script_count++];
- strncpy(current_script->name, line + 3, MAX_SCRIPT_NAME - 1);
- current_script->name[MAX_SCRIPT_NAME - 1] = '\0';
- current_script->cmd_count = 0;
- } else if (strncmp(line, "C: ", 3) == 0 && current_script && current_script->cmd_count < MAX_SCRIPT_CMDS) {
- strncpy(current_script->commands[current_script->cmd_count++], line + 3, MAX_INPUT - 1);
- current_script->commands[current_script->cmd_count - 1][MAX_INPUT - 1] = '\0';
- } else if (strncmp(line, "T: ", 3) == 0) {
- sscanf(line + 3, "%d %d %d", &test_active, &test_score, &questions_answered);
- } else if (strncmp(line, "A: ", 3) == 0) {
- int qnum, ans;
- sscanf(line + 3, "%d %d", &qnum, &ans);
- if (qnum >= 0 && qnum < MAX_QUESTIONS) test_answers[qnum] = ans;
- }
- line = strtok(NULL, "\n");
- }
- free(buffer);
- return TRIT_OK;
+    fclose(f);
+    return TRIT_OK;
 }
 
 Script* find_script(const char* name) {
- for (int i = 0; i < script_count; i++) {
- if (strcmp(scripts[i].name, name) == 0) return &scripts[i];
- }
- return NULL;
+    for (int i = 0; i < script_count; i++) {
+        if (strcmp(scripts[i].name, name) == 0) return &scripts[i];
+    }
+    return NULL;
 }
 
 @*2 Error Handling.
@@ -463,1025 +363,672 @@ Script* find_script(const char* name) {
 @d TRIT_ERR_PRECISION 7
 @d TRIT_ERR_MMAP 8
 @d TRIT_ERR_SCRIPT 9
-@d TRIT_ERR_NETWORK 10
 
 FILE* audit_log = NULL;
 
 void init_audit_log() {
- audit_log = fopen("/var/log/tritjs_cisa.log", "a");
- if (!audit_log) {
- perror("Audit log initialization failed");
- audit_log = fopen("/tmp/tritjs_cisa.log", "a"); /* Fallback */
- }
- if (audit_log) chmod("/var/log/tritjs_cisa.log", 0600); /* Secure permissions */
+    audit_log = fopen("/var/log/tritjs_cisa.log", "a");
+    if (!audit_log) perror("Audit log initialization failed");
 }
 
 void log_error(TritError err, const char* context) {
- pthread_mutex_lock(&mutex);
- if (audit_log) {
- time_t now;
- time(&now);
- fprintf(audit_log, "[%s] Error %d: %s in %s\n", ctime(&now), err, trit_error_str(err), context);
- fflush(audit_log);
- }
- pthread_mutex_unlock(&mutex);
+    if (!audit_log) return;
+    time_t now;
+    time(&now);
+    fprintf(audit_log, "[%s] Error %d: %s in %s\n", ctime(&now), err, trit_error_str(err), context);
+    fflush(audit_log);
 }
 
 const char* trit_error_str(TritError err) {
- switch (err) {
- case TRIT_OK: return "No error";
- case TRIT_ERR_MEM: return "Memory allocation failed";
- case TRIT_ERR_INPUT: return "Invalid input (trits 0-2 only)";
- case TRIT_ERR_DIV_ZERO: return "Division by zero";
- case TRIT_ERR_OVERFLOW: return "Overflow detected";
- case TRIT_ERR_UNDEFINED: return "Operation undefined";
- case TRIT_ERR_NEGATIVE: return "Negative input";
- case TRIT_ERR_PRECISION: return "Precision limit exceeded";
- case TRIT_ERR_MMAP: return "Memory mapping failed";
- case TRIT_ERR_SCRIPT: return "Scripting error";
- case TRIT_ERR_NETWORK: return "Network error";
- default: return "Unknown error";
- }
-}
-
-TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_path) {
- if (len * sizeof(Trit) > MAX_MMAP_SIZE) {
- log_error(TRIT_ERR_OVERFLOW, "map_trits");
- return TRIT_ERR_OVERFLOW;
- }
- strcpy(tmp_path, "/tmp/tritjs_cisa_XXXXXX");
- *fd = mkstemp(tmp_path);
- if (*fd < 0) {
- log_error(TRIT_ERR_MMAP, "map_trits: mkstemp");
- return TRIT_ERR_MMAP;
- }
- if (ftruncate(*fd, len * sizeof(Trit)) < 0) {
- close(*fd);
- unlink(tmp_path);
- log_error(TRIT_ERR_MMAP, "map_trits: ftruncate");
- return TRIT_ERR_MMAP;
- }
- *digits = mmap(NULL, len * sizeof(Trit), PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
- if (*digits == MAP_FAILED) {
- close(*fd);
- unlink(tmp_path);
- log_error(TRIT_ERR_MMAP, "map_trits: mmap");
- return TRIT_ERR_MMAP;
- }
- *is_mapped = 1;
- pthread_mutex_lock(&mutex);
- total_mapped_bytes += len * sizeof(Trit);
- operation_steps++;
- display_memory_and_stats("Mapping", "merge");
- pthread_mutex_unlock(&mutex);
- unlink(tmp_path);
- return TRIT_OK;
-}
-
-void unmap_trits(Trit* digits, int len, int is_mapped, int fd) {
- if (is_mapped && digits != MAP_FAILED) {
- pthread_mutex_lock(&mutex);
- total_mapped_bytes -= len * sizeof(Trit);
- operation_steps++;
- display_memory_and_stats("Unmapping", "merge");
- pthread_mutex_unlock(&mutex);
- munmap(digits, len * sizeof(Trit));
- if (fd >= 0) close(fd);
- } else if (!is_mapped) {
- free(digits);
- }
-}
-
-TritError tritbig_from_trits(Trit* trits, int len, int sign, TritBigInt** bi) {
- if (!trits || len <= 0) {
- log_error(TRIT_ERR_INPUT, "tritbig_from_trits");
- return TRIT_ERR_INPUT;
- }
- *bi = calloc(1, sizeof(TritBigInt));
- if (!*bi) {
- log_error(TRIT_ERR_MEM, "tritbig_from_trits");
- return TRIT_ERR_MEM;
- }
- TritError err = map_trits(&(*bi)->digits, len, &(*bi)->is_mapped, &(*bi)->fd, (*bi)->tmp_path);
- if (err != TRIT_OK) {
- free(*bi);
- return err;
- }
- memcpy((*bi)->digits, trits, len * sizeof(Trit));
- (*bi)->len = len;
- (*bi)->sign = sign;
- return TRIT_OK;
-}
-
-void tritbig_free(TritBigInt* bi) {
- if (bi) {
- unmap_trits(bi->digits, bi->len, bi->is_mapped, bi->fd);
- free(bi);
- }
-}
-
-TritError tritfloat_from_bigint(TritBigInt* bi, TritFloat* tf) {
- if (!bi || bi->len <= 0) {
- log_error(TRIT_ERR_INPUT, "tritfloat_from_bigint");
- return TRIT_ERR_INPUT;
- }
- tf->sign = bi->sign;
- tf->i_len = bi->len;
- tf->f_len = 0;
- TritError err = map_trits(&tf->integer, bi->len, &tf->i_mapped, &tf->i_fd, tf->i_tmp_path);
- if (err != TRIT_OK) return err;
- memcpy(tf->integer, bi->digits, bi->len * sizeof(Trit));
- tf->fraction = NULL;
- tf->f_mapped = 0;
- return TRIT_OK;
-}
-
-void tritfloat_free(TritFloat tf) {
- unmap_trits(tf.integer, tf.i_len, tf.i_mapped, tf.i_fd);
- if (tf.f_len > 0) unmap_trits(tf.fraction, tf.f_len, tf.f_mapped, tf.f_fd);
-}
-
-TritError tritcomplex_from_float(TritFloat real, TritFloat imag, TritComplex* tc) {
- tc->real = real;
- tc->imag = imag;
- return TRIT_OK;
-}
-
-void tritcomplex_free(TritComplex tc) {
- tritfloat_free(tc.real);
- tritfloat_free(tc.imag);
+    switch (err) {
+        case TRIT_OK: return "No error";
+        case TRIT_ERR_MEM: return "Memory allocation failed";
+        case TRIT_ERR_INPUT: return "Invalid input (trits 0-2 only)";
+        case TRIT_ERR_DIV_ZERO: return "Division by zero";
+        case TRIT_ERR_OVERFLOW: return "Overflow detected";
+        case TRIT_ERR_UNDEFINED: return "Operation undefined";
+        case TRIT_ERR_NEGATIVE: return "Negative input (complex handled)";
+        case TRIT_ERR_PRECISION: return "Precision limit exceeded";
+        case TRIT_ERR_MMAP: return "Memory mapping failed";
+        case TRIT_ERR_SCRIPT: return "Scripting error";
+        default: return "Unknown error";
+    }
 }
 
 @*2 Arithmetic Operations.
 @c
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
- if (!a || !b || a->len > 10000 || b->len > 10000) {
- log_error(TRIT_ERR_INPUT, "tritjs_add_big");
- return TRIT_ERR_INPUT;
- }
- int max_len = (a->len > b->len) ? a->len : b->len;
- Trit* temp = calloc(max_len + 1, sizeof(Trit));
- if (!temp) {
- log_error(TRIT_ERR_MEM, "tritjs_add_big");
- return TRIT_ERR_MEM;
- }
- int carry = 0;
+    if (!a || !b || a->len > 1000 || b->len > 1000) return TRIT_ERR_INPUT;
+    int max_len = (a->len > b->len) ? a->len : b->len;
+    Trit* temp = calloc(max_len + 1, sizeof(Trit));
+    if (!temp) return TRIT_ERR_MEM;
+    int carry = 0;
 
- if (a->sign == b->sign) {
- for (int i = max_len - 1, pos = 0; i >= 0; i--, pos++) {
- Trit a_trit = (i < a->len) ? a->digits[i] : 0;
- Trit b_trit = (i < b->len) ? b->digits[i] : 0;
- int sum = a_trit + b_trit + carry;
- temp[max_len - pos] = sum % TRIT_MAX;
- carry = sum / TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("add", "merge");
- }
- if (carry) temp[0] = carry;
- int result_len = carry ? max_len + 1 : max_len;
- if (!carry) memmove(temp, temp + 1, max_len * sizeof(Trit));
- TritError err = tritbig_from_trits(temp, result_len, a->sign, result);
- free(temp);
- return err;
- } else {
- TritBigInt* b_neg;
- TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
- if (err != TRIT_OK) {
- free(temp);
- return err;
- }
- err = tritjs_add_big(a, b_neg, result);
- tritbig_free(b_neg);
- free(temp);
- return err;
- }
+    if (a->sign == b->sign) {
+        for (int i = max_len - 1, pos = 0; i >= 0; i--, pos++) {
+            Trit a_trit = (i < a->len) ? a->digits[i] : 0;
+            Trit b_trit = (i < b->len) ? b->digits[i] : 0;
+            int sum = a_trit + b_trit + carry;
+            temp[max_len - pos] = sum % TRIT_MAX;
+            carry = sum / TRIT_MAX;
+            operation_steps++;
+            display_memory_and_stats("add", "merge");
+        }
+        if (carry) temp[0] = carry;
+        int result_len = carry ? max_len + 1 : max_len;
+        if (!carry) memmove(temp, temp + 1, max_len * sizeof(Trit));
+        TritError err = tritbig_from_trits(temp, result_len, a->sign, result);
+        free(temp);
+        return err;
+    } else {
+        TritBigInt* b_neg;
+        TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
+        if (err != TRIT_OK) { free(temp); return err; }
+        err = tritjs_add_big(a, b_neg, result);
+        tritbig_free(b_neg);
+        free(temp);
+        return err;
+    }
 }
 
 TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
- if (!a || !b) {
- log_error(TRIT_ERR_INPUT, "tritjs_subtract_big");
- return TRIT_ERR_INPUT;
- }
- TritBigInt* b_neg;
- TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
- if (err != TRIT_OK) return err;
- err = tritjs_add_big(a, b_neg, result);
- tritbig_free(b_neg);
- return err;
+    if (!a || !b) return TRIT_ERR_INPUT;
+    TritBigInt* b_neg;
+    TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
+    if (err != TRIT_OK) return err;
+    err = tritjs_add_big(a, b_neg, result);
+    tritbig_free(b_neg);
+    return err;
 }
 
 TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
- if (!a || !b) {
- log_error(TRIT_ERR_INPUT, "tritjs_multiply_big");
- return TRIT_ERR_INPUT;
- }
- int max_len = a->len + b->len;
- Trit* temp = calloc(max_len, sizeof(Trit));
- if (!temp) {
- log_error(TRIT_ERR_MEM, "tritjs_multiply_big");
- return TRIT_ERR_MEM;
- }
- for (int i = a->len - 1; i >= 0; i--) {
- int carry = 0;
- for (int j = b->len - 1; j >= 0; j--) {
- int pos = i + j + 1;
- int prod = a->digits[i] * b->digits[j] + temp[pos] + carry;
- temp[pos] = prod % TRIT_MAX;
- carry = prod / TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("mul", "merge");
- }
- if (carry) temp[i] += carry;
- }
- int start = 0;
- while (start < max_len - 1 && temp[start] == 0) start++;
- int sign = (a->sign == b->sign) ? 0 : 1;
- TritError err = tritbig_from_trits(temp + start, max_len - start, sign, result);
- free(temp);
- return err;
+    if (!a || !b) return TRIT_ERR_INPUT;
+    int max_len = a->len + b->len;
+    Trit* temp = calloc(max_len, sizeof(Trit));
+    if (!temp) return TRIT_ERR_MEM;
+    for (int i = a->len - 1; i >= 0; i--) {
+        int carry = 0;
+        for (int j = b->len - 1; j >= 0; j--) {
+            int pos = i + j + 1;
+            int prod = a->digits[i] * b->digits[j] + temp[pos] + carry;
+            temp[pos] = prod % TRIT_MAX;
+            carry = prod / TRIT_MAX;
+            operation_steps++;
+            display_memory_and_stats("mul", "merge");
+        }
+        if (carry) temp[i] += carry;
+    }
+    int start = 0;
+    while (start < max_len - 1 && temp[start] == 0) start++;
+    int sign = (a->sign == b->sign) ? 0 : 1;
+    TritError err = tritbig_from_trits(temp + start, max_len - start, sign, result);
+    free(temp);
+    return err;
 }
 
 void cleanup_div(TritBigInt* temp_rem, TritFloat* dividend, TritFloat* divisor, TritDivResult* result) {
- if (temp_rem) tritbig_free(temp_rem);
- if (dividend->integer) tritfloat_free(*dividend);
- if (divisor->integer) tritfloat_free(*divisor);
- if (result->quotient.integer) tritfloat_free(result->quotient);
- if (result->remainder.integer) tritfloat_free(result->remainder);
+    if (temp_rem) tritbig_free(temp_rem);
+    if (dividend->integer) tritfloat_free(*dividend);
+    if (divisor->integer) tritfloat_free(*divisor);
+    if (result->quotient.integer) tritfloat_free(result->quotient);
+    if (result->remainder.integer) tritfloat_free(result->remainder);
 }
 
 TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision) {
- TritError err;
- if (!a || !b) {
- log_error(TRIT_ERR_INPUT, "tritjs_divide_big");
- return TRIT_ERR_INPUT;
- }
- if (precision <= 0 || precision > 10) {
- log_error(TRIT_ERR_PRECISION, "tritjs_divide_big");
- return TRIT_ERR_PRECISION;
- }
+    TritError err;
+    if (!a || !b) return TRIT_ERR_INPUT;
+    if (precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
 
- int b_is_zero = 1;
- for (int i = 0; i < b->len; i++) {
- if (b->digits[i] != 0) { b_is_zero = 0; break; }
- }
- if (b_is_zero) {
- log_error(TRIT_ERR_DIV_ZERO, "tritjs_divide_big");
- return TRIT_ERR_DIV_ZERO;
- }
+    int b_is_zero = 1;
+    for (int i = 0; i < b->len; i++) {
+        if (b->digits[i] != 0) { b_is_zero = 0; break; }
+    }
+    if (b_is_zero) return TRIT_ERR_DIV_ZERO;
 
- TritFloat dividend = {0}, divisor = {0};
- if ((err = tritfloat_from_bigint(a, &dividend)) != TRIT_OK) return err;
- if ((err = tritfloat_from_bigint(b, &divisor)) != TRIT_OK) {
- tritfloat_free(dividend);
- return err;
- }
+    TritFloat dividend = {0}, divisor = {0};
+    if ((err = tritfloat_from_bigint(a, &dividend)) != TRIT_OK) return err;
+    if ((err = tritfloat_from_bigint(b, &divisor)) != TRIT_OK) {
+        tritfloat_free(dividend);
+        return err;
+    }
 
- result->quotient.i_len = a->len;
- result->quotient.f_len = precision;
- result->remainder.i_len = b->len;
- result->quotient.sign = (a->sign == b->sign) ? 0 : 1;
- result->remainder.sign = a->sign;
+    result->quotient.i_len = a->len;
+    result->quotient.f_len = precision;
+    result->remainder.i_len = b->len;
+    result->quotient.sign = (a->sign == b->sign) ? 0 : 1;
+    result->remainder.sign = a->sign;
 
- if ((err = map_trits(&result->quotient.integer, a->len, &result->quotient.i_mapped, &result->quotient.i_fd, result->quotient.i_tmp_path)) != TRIT_OK) goto cleanup;
- if ((err = map_trits(&result->quotient.fraction, precision, &result->quotient.f_mapped, &result->quotient.f_fd, result->quotient.f_tmp_path)) != TRIT_OK) goto cleanup;
- if ((err = map_trits(&result->remainder.integer, b->len, &result->remainder.i_mapped, &result->remainder.i_fd, result->remainder.i_tmp_path)) != TRIT_OK) goto cleanup;
+    if ((err = map_trits(&result->quotient.integer, a->len, &result->quotient.i_mapped, &result->quotient.i_fd, result->quotient.i_tmp_path)) != TRIT_OK) goto cleanup;
+    if ((err = map_trits(&result->quotient.fraction, precision, &result->quotient.f_mapped, &result->quotient.f_fd, result->quotient.f_tmp_path)) != TRIT_OK) goto cleanup;
+    if ((err = map_trits(&result->remainder.integer, b->len, &result->remainder.i_mapped, &result->remainder.i_fd, result->remainder.i_tmp_path)) != TRIT_OK) goto cleanup;
 
- TritBigInt* temp_rem = NULL;
- if ((err = tritbig_from_trits(a->digits, a->len, a->sign, &temp_rem)) != TRIT_OK) goto cleanup;
+    TritBigInt* temp_rem = NULL;
+    if ((err = tritbig_from_trits(a->digits, a->len, a->sign, &temp_rem)) != TRIT_OK) goto cleanup;
 
- for (int i = 0; i < a->len; i++) {
- int digit = 0;
- for (int q = 2; q >= 0; q--) {
- TritBigInt* multiple = NULL;
- Trit trits[] = {(Trit)q};
- if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != TRIT_OK) goto cleanup_inner;
- TritBigInt* prod = NULL;
- if ((err = tritjs_multiply_big(b, multiple, &prod)) != TRIT_OK) {
- tritbig_free(multiple);
- goto cleanup_inner;
- }
- TritBigInt* sub = NULL;
- if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == TRIT_OK) {
- digit = q;
- tritbig_free(temp_rem);
- temp_rem = sub;
- tritbig_free(multiple);
- tritbig_free(prod);
- break;
- }
- tritbig_free(multiple);
- tritbig_free(prod);
- operation_steps++;
- display_memory_and_stats("div", "merge");
- }
- result->quotient.integer[i] = digit;
- }
+    for (int i = 0; i < a->len; i++) {
+        int digit = 0;
+        for (int q = 2; q >= 0; q--) {
+            TritBigInt* multiple = NULL;
+            Trit trits[] = {(Trit)q};
+            if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != TRIT_OK) goto cleanup_inner;
+            TritBigInt* prod = NULL;
+            if ((err = tritjs_multiply_big(b, multiple, &prod)) != TRIT_OK) {
+                tritbig_free(multiple);
+                goto cleanup_inner;
+            }
+            TritBigInt* sub = NULL;
+            if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == TRIT_OK) {
+                digit = q;
+                tritbig_free(temp_rem);
+                temp_rem = sub;
+                tritbig_free(multiple);
+                tritbig_free(prod);
+                break;
+            }
+            tritbig_free(multiple);
+            tritbig_free(prod);
+            operation_steps++;
+            display_memory_and_stats("div", "merge");
+        }
+        result->quotient.integer[i] = digit;
+    }
 
- for (int i = 0; i < precision; i++) {
- TritBigInt* three = NULL;
- if ((err = tritbig_from_trits((Trit[]){1}, 1, 0, &three)) != TRIT_OK) goto cleanup_inner;
- TritBigInt* temp_mul = NULL;
- if ((err = tritjs_multiply_big(temp_rem, three, &temp_mul)) != TRIT_OK) {
- tritbig_free(three);
- goto cleanup_inner;
- }
- tritbig_free(temp_rem);
- temp_rem = temp_mul;
- int digit = 0;
- for (int q = 2; q >= 0; q--) {
- TritBigInt* multiple = NULL;
- Trit trits[] = {(Trit)q};
- if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != TRIT_OK) goto cleanup_inner;
- TritBigInt* prod = NULL;
- if ((err = tritjs_multiply_big(b, multiple, &prod)) != TRIT_OK) {
- tritbig_free(multiple);
- goto cleanup_inner;
- }
- TritBigInt* sub = NULL;
- if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == TRIT_OK) {
- digit = q;
- tritbig_free(temp_rem);
- temp_rem = sub;
- tritbig_free(multiple);
- tritbig_free(prod);
- break;
- }
- tritbig_free(multiple);
- tritbig_free(prod);
- operation_steps++;
- display_memory_and_stats("div", "merge");
- }
- result->quotient.fraction[i] = digit;
- }
+    for (int i = 0; i < precision; i++) {
+        TritBigInt* three = NULL;
+        if ((err = tritbig_from_trits((Trit[]){1}, 1, 0, &three)) != TRIT_OK) goto cleanup_inner;
+        TritBigInt* temp_mul = NULL;
+        if ((err = tritjs_multiply_big(temp_rem, three, &temp_mul)) != TRIT_OK) {
+            tritbig_free(three);
+            goto cleanup_inner;
+        }
+        tritbig_free(temp_rem);
+        temp_rem = temp_mul;
+        int digit = 0;
+        for (int q = 2; q >= 0; q--) {
+            TritBigInt* multiple = NULL;
+            Trit trits[] = {(Trit)q};
+            if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != TRIT_OK) goto cleanup_inner;
+            TritBigInt* prod = NULL;
+            if ((err = tritjs_multiply_big(b, multiple, &prod)) != TRIT_OK) {
+                tritbig_free(multiple);
+                goto cleanup_inner;
+            }
+            TritBigInt* sub = NULL;
+            if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == TRIT_OK) {
+                digit = q;
+                tritbig_free(temp_rem);
+                temp_rem = sub;
+                tritbig_free(multiple);
+                tritbig_free(prod);
+                break;
+            }
+            tritbig_free(multiple);
+            tritbig_free(prod);
+            operation_steps++;
+            display_memory_and_stats("div", "merge");
+        }
+        result->quotient.fraction[i] = digit;
+    }
 
- int start = 0;
- while (start < result->quotient.i_len - 1 && result->quotient.integer[start] == 0) start++;
- if (start > 0) {
- memmove(result->quotient.integer, result->quotient.integer + start, (result->quotient.i_len - start) * sizeof(Trit));
- result->quotient.i_len -= start;
- }
+    int start = 0;
+    while (start < result->quotient.i_len - 1 && result->quotient.integer[start] == 0) start++;
+    if (start > 0) {
+        memmove(result->quotient.integer, result->quotient.integer + start, (result->quotient.i_len - start) * sizeof(Trit));
+        result->quotient.i_len -= start;
+    }
 
 cleanup_inner:
- tritbig_free(temp_rem);
+    tritbig_free(temp_rem);
 cleanup:
- if (err != TRIT_OK) {
- tritfloat_free(result->quotient);
- tritfloat_free(result->remainder);
- }
- tritfloat_free(dividend);
- tritfloat_free(divisor);
- return err;
+    if (err != TRIT_OK) {
+        tritfloat_free(result->quotient);
+        tritfloat_free(result->remainder);
+    }
+    tritfloat_free(dividend);
+    tritfloat_free(divisor);
+    return err;
 }
 
 TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** result) {
- if (!base || !exp) {
- log_error(TRIT_ERR_INPUT, "tritjs_power_big");
- return TRIT_ERR_INPUT;
- }
- if (exp->sign) {
- log_error(TRIT_ERR_NEGATIVE, "tritjs_power_big");
- return TRIT_ERR_NEGATIVE;
- }
- TritError err;
- Trit trits[] = {1};
- if ((err = tritbig_from_trits(trits, 1, 0, result)) != TRIT_OK) return err;
- unsigned long exp_val = 0;
- for (int i = 0; i < exp->len; i++) exp_val = exp_val * TRIT_MAX + exp->digits[i];
- if (exp_val > 1000) {
- tritbig_free(*result);
- log_error(TRIT_ERR_OVERFLOW, "tritjs_power_big");
- return TRIT_ERR_OVERFLOW;
- }
- int sign = (base->sign && (exp_val % 2)) ? 1 : 0;
- for (unsigned long i = 0; i < exp_val; i++) {
- TritBigInt* temp;
- if ((err = tritjs_multiply_big(*result, base, &temp)) != TRIT_OK) {
- tritbig_free(*result);
- return err;
- }
- tritbig_free(*result);
- *result = temp;
- operation_steps++;
- display_memory_and_stats("pow", "merge");
- }
- (*result)->sign = sign;
- return TRIT_OK;
+    if (!base || !exp) return TRIT_ERR_INPUT;
+    if (exp->sign) return TRIT_ERR_NEGATIVE;
+    TritError err;
+    Trit trits[] = {1};
+    if ((err = tritbig_from_trits(trits, 1, 0, result)) != TRIT_OK) return err;
+    unsigned long exp_val = 0;
+    for (int i = 0; i < exp->len; i++) exp_val = exp_val * TRIT_MAX + exp->digits[i];
+    if (exp_val > 1000) {
+        tritbig_free(*result);
+        return TRIT_ERR_OVERFLOW;
+    }
+    int sign = (base->sign && (exp_val % 2)) ? 1 : 0;
+    for (unsigned long i = 0; i < exp_val; i++) {
+        TritBigInt* temp;
+        if ((err = tritjs_multiply_big(*result, base, &temp)) != TRIT_OK) {
+            tritbig_free(*result);
+            return err;
+        }
+        tritbig_free(*result);
+        *result = temp;
+        operation_steps++;
+        display_memory_and_stats("pow", "merge");
+    }
+    (*result)->sign = sign;
+    return TRIT_OK;
 }
 
 TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result) {
- if (!a) {
- log_error(TRIT_ERR_INPUT, "tritjs_factorial_big");
- return TRIT_ERR_INPUT;
- }
- if (a->sign) {
- log_error(TRIT_ERR_NEGATIVE, "tritjs_factorial_big");
- return TRIT_ERR_NEGATIVE;
- }
- unsigned long a_val = 0;
- for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
- if (a_val > 20) {
- log_error(TRIT_ERR_OVERFLOW, "tritjs_factorial_big");
- return TRIT_ERR_OVERFLOW;
- }
- TritError err;
- Trit trits[] = {1};
- if ((err = tritbig_from_trits(trits, 1, 0, result)) != TRIT_OK) return err;
- for (unsigned long i = 1; i <= a_val; i++) {
- TritBigInt* i_bi;
- Trit i_trits[2];
- i_trits[0] = i / TRIT_MAX; i_trits[1] = i % TRIT_MAX;
- int len = (i >= TRIT_MAX) ? 2 : 1;
- if ((err = tritbig_from_trits(i_trits + (2 - len), len, 0, &i_bi)) != TRIT_OK) {
- tritbig_free(*result);
- return err;
- }
- TritBigInt* temp;
- if ((err = tritjs_multiply_big(*result, i_bi, &temp)) != TRIT_OK) {
- tritbig_free(i_bi);
- tritbig_free(*result);
- return err;
- }
- tritbig_free(*result);
- tritbig_free(i_bi);
- *result = temp;
- operation_steps++;
- display_memory_and_stats("fact", "merge");
- }
- return TRIT_OK;
+    if (!a) return TRIT_ERR_INPUT;
+    if (a->sign) return TRIT_ERR_NEGATIVE;
+    unsigned long a_val = 0;
+    for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+    if (a_val > 20) return TRIT_ERR_OVERFLOW;
+    TritError err;
+    Trit trits[] = {1};
+    if ((err = tritbig_from_trits(trits, 1, 0, result)) != TRIT_OK) return err;
+    for (unsigned long i = 1; i <= a_val; i++) {
+        TritBigInt* i_bi;
+        Trit i_trits[2];
+        i_trits[0] = i / TRIT_MAX; i_trits[1] = i % TRIT_MAX;
+        int len = (i >= TRIT_MAX) ? 2 : 1;
+        if ((err = tritbig_from_trits(i_trits + (2 - len), len, 0, &i_bi)) != TRIT_OK) {
+            tritbig_free(*result);
+            return err;
+        }
+        TritBigInt* temp;
+        if ((err = tritjs_multiply_big(*result, i_bi, &temp)) != TRIT_OK) {
+            tritbig_free(i_bi);
+            tritbig_free(*result);
+            return err;
+        }
+        tritbig_free(*result);
+        tritbig_free(i_bi);
+        *result = temp;
+        operation_steps++;
+        display_memory_and_stats("fact", "merge");
+    }
+    return TRIT_OK;
 }
 
 @*2 Scientific Operations.
 @c
 TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result) {
- if (!a || precision <= 0 || precision > 10 || a->len > 10000) {
- log_error(TRIT_ERR_PRECISION, "tritjs_sqrt_complex");
- return TRIT_ERR_PRECISION;
- }
- unsigned long a_val = 0;
- for (int i = 0; i < a->len; i++) {
- if (a_val > ULONG_MAX / TRIT_MAX) {
- log_error(TRIT_ERR_OVERFLOW, "tritjs_sqrt_complex");
- return TRIT_ERR_OVERFLOW;
- }
- a_val = a_val * TRIT_MAX + a->digits[i];
- }
- double val = (double)a_val * (a->sign ? -1 : 1);
- TritError err;
- if (val >= 0) {
- double sqrt_val = sqrt(val);
- unsigned long int_part = (unsigned long)sqrt_val;
- double frac_part = sqrt_val - int_part;
- Trit* int_trits = calloc((a->len + 1) / 2, sizeof(Trit));
- Trit* frac_trits = calloc(precision, sizeof(Trit));
- if (!int_trits || !frac_trits) {
- free(int_trits); free(frac_trits);
- log_error(TRIT_ERR_MEM, "tritjs_sqrt_complex");
- return TRIT_ERR_MEM;
- }
- for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
- int_trits[i] = int_part % TRIT_MAX;
- int_part /= TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("sqrt", "merge");
- }
- for (int i = precision - 1; i >= 0; i--) {
- frac_part *= TRIT_MAX;
- frac_trits[i] = (unsigned long)frac_part;
- frac_part -= (unsigned long)frac_part;
- operation_steps++;
- display_memory_and_stats("sqrt", "merge");
- }
- TritBigInt* real_int;
- if ((err = tritbig_from_trits(int_trits, (a->len + 1) / 2, 0, &real_int)) != TRIT_OK) goto sqrt_cleanup;
- if ((err = tritfloat_from_bigint(real_int, &result->real)) != TRIT_OK) goto sqrt_cleanup;
- tritbig_free(real_int);
- if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto sqrt_cleanup;
- memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
- result->real.f_len = precision;
- result->imag.integer = calloc(1, sizeof(Trit));
- if (!result->imag.integer) { err = TRIT_ERR_MEM; goto sqrt_cleanup; }
- result->imag.i_len = 1;
- result->imag.i_mapped = 0;
- result->imag.sign = 0;
- result->imag.fraction = NULL;
- result->imag.f_len = 0;
- sqrt_cleanup:
- free(int_trits); free(frac_trits);
- if (err != TRIT_OK) tritcomplex_free(*result);
- return err;
- } else {
- double sqrt_val = sqrt(-val);
- unsigned long int_part = (unsigned long)sqrt_val;
- double frac_part = sqrt_val - int_part;
- result->real.integer = calloc(1, sizeof(Trit));
- if (!result->real.integer) {
- log_error(TRIT_ERR_MEM, "tritjs_sqrt_complex");
- return TRIT_ERR_MEM;
- }
- result->real.i_len = 1;
- result->real.i_mapped = 0;
- result->real.sign = 0;
- if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) {
- free(result->real.integer);
- return err;
- }
- memset(result->real.fraction, 0, precision * sizeof(Trit));
- result->real.f_len = precision;
- Trit* imag_int = calloc((a->len + 1) / 2, sizeof(Trit));
- Trit* imag_frac = calloc(precision, sizeof(Trit));
- if (!imag_int || !imag_frac) {
- free(imag_int); free(imag_frac);
- tritfloat_free(result->real);
- log_error(TRIT_ERR_MEM, "tritjs_sqrt_complex");
- return TRIT_ERR_MEM;
- }
- for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
- imag_int[i] = int_part % TRIT_MAX;
- int_part /= TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("sqrt", "merge");
- }
- for (int i = precision - 1; i >= 0; i--) {
- frac_part *= TRIT_MAX;
- imag_frac[i] = (unsigned long)frac_part;
- frac_part -= (unsigned long)frac_part;
- operation_steps++;
- display_memory_and_stats("sqrt", "merge");
- }
- TritBigInt* imag_bi;
- if ((err = tritbig_from_trits(imag_int, (a->len + 1) / 2, 0, &imag_bi)) != TRIT_OK) {
- free(imag_int); free(imag_frac);
- tritfloat_free(result->real);
- return err;
- }
- if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != TRIT_OK) {
- tritbig_free(imag_bi);
- free(imag_int); free(imag_frac);
- return err;
- }
- tritbig_free(imag_bi);
- if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != TRIT_OK) {
- free(imag_int); free(imag_frac);
- tritfloat_free(result->real);
- return err;
- }
- memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
- result->imag.f_len = precision;
- free(imag_int); free(imag_frac);
- return TRIT_OK;
- }
+    if (!a || precision <= 0 || precision > 10 || a->len > 1000) return TRIT_ERR_PRECISION;
+    unsigned long a_val = 0;
+    for (int i = 0; i < a->len; i++) {
+        if (a_val > ULONG_MAX / TRIT_MAX) return TRIT_ERR_OVERFLOW;
+        a_val = a_val * TRIT_MAX + a->digits[i];
+    }
+    double val = (double)a_val * (a->sign ? -1 : 1);
+    TritError err;
+    if (val >= 0) {
+        double sqrt_val = sqrt(val);
+        unsigned long int_part = (unsigned long)sqrt_val;
+        double frac_part = sqrt_val - int_part;
+        Trit* int_trits = calloc((a->len + 1) / 2, sizeof(Trit));
+        Trit* frac_trits = calloc(precision, sizeof(Trit));
+        if (!int_trits || !frac_trits) {
+            free(int_trits); free(frac_trits);
+            return TRIT_ERR_MEM;
+        }
+        for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
+            int_trits[i] = int_part % TRIT_MAX;
+            int_part /= TRIT_MAX;
+            operation_steps++;
+            display_memory_and_stats("sqrt", "merge");
+        }
+        for (int i = precision - 1; i >= 0; i--) {
+            frac_part *= TRIT_MAX;
+            frac_trits[i] = (unsigned long)frac_part;
+            frac_part -= (unsigned long)frac_part;
+            operation_steps++;
+            display_memory_and_stats("sqrt", "merge");
+        }
+        TritBigInt* real_int;
+        if ((err = tritbig_from_trits(int_trits, (a->len + 1) / 2, 0, &real_int)) != TRIT_OK) goto sqrt_cleanup;
+        if ((err = tritfloat_from_bigint(real_int, &result->real)) != TRIT_OK) goto sqrt_cleanup;
+        tritbig_free(real_int);
+        if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto sqrt_cleanup;
+        memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
+        result->real.f_len = precision;
+        result->imag.integer = calloc(1, sizeof(Trit));
+        if (!result->imag.integer) { err = TRIT_ERR_MEM; goto sqrt_cleanup; }
+        result->imag.i_len = 1;
+        result->imag.i_mapped = 0;
+        result->imag.sign = 0;
+        result->imag.fraction = NULL;
+        result->imag.f_len = 0;
+    sqrt_cleanup:
+        free(int_trits); free(frac_trits);
+        if (err != TRIT_OK) tritcomplex_free(*result);
+        return err;
+    } else {
+        double sqrt_val = sqrt(-val);
+        unsigned long int_part = (unsigned long)sqrt_val;
+        double frac_part = sqrt_val - int_part;
+        result->real.integer = calloc(1, sizeof(Trit));
+        if (!result->real.integer) return TRIT_ERR_MEM;
+        result->real.i_len = 1;
+        result->real.i_mapped = 0;
+        result->real.sign = 0;
+        if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) {
+            free(result->real.integer);
+            return err;
+        }
+        memset(result->real.fraction, 0, precision * sizeof(Trit));
+        result->real.f_len = precision;
+        Trit* imag_int = calloc((a->len + 1) / 2, sizeof(Trit));
+        Trit* imag_frac = calloc(precision, sizeof(Trit));
+        if (!imag_int || !imag_frac) {
+            free(imag_int); free(imag_frac);
+            tritfloat_free(result->real);
+            return TRIT_ERR_MEM;
+        }
+        for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
+            imag_int[i] = int_part % TRIT_MAX;
+            int_part /= TRIT_MAX;
+            operation_steps++;
+            display_memory_and_stats("sqrt", "merge");
+        }
+        for (int i = precision - 1; i >= 0; i--) {
+            frac_part *= TRIT_MAX;
+            imag_frac[i] = (unsigned long)frac_part;
+            frac_part -= (unsigned long)frac_part;
+            operation_steps++;
+            display_memory_and_stats("sqrt", "merge");
+        }
+        TritBigInt* imag_bi;
+        if ((err = tritbig_from_trits(imag_int, (a->len + 1) / 2, 0, &imag_bi)) != TRIT_OK) {
+            free(imag_int); free(imag_frac);
+            tritfloat_free(result->real);
+            return err;
+        }
+        if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != TRIT_OK) {
+            tritbig_free(imag_bi);
+            free(imag_int); free(imag_frac);
+            return err;
+        }
+        tritbig_free(imag_bi);
+        if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != TRIT_OK) {
+            free(imag_int); free(imag_frac);
+            tritfloat_free(result->real);
+            return err;
+        }
+        memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
+        result->imag.f_len = precision;
+        free(imag_int); free(imag_frac);
+        return TRIT_OK;
+    }
 }
 
 TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result) {
- if (!a || precision <= 0 || precision > 10) {
- log_error(TRIT_ERR_PRECISION, "tritjs_log3_complex");
- return TRIT_ERR_PRECISION;
- }
- unsigned long a_val = 0;
- for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
- double real = (double)a_val * (a->sign ? -1 : 1);
- double imag = 0;
- double mag = sqrt(real * real + imag * imag);
- double arg = atan2(imag, real);
- double ln3 = log(3.0);
- double real_val = log(mag) / ln3;
- double imag_val = arg / ln3;
+    if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
+    unsigned long a_val = 0;
+    for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+    double real = (double)a_val * (a->sign ? -1 : 1);
+    double imag = 0;
+    double mag = sqrt(real * real + imag * imag);
+    double arg = atan2(imag, real);
+    double ln3 = log(3.0);
+    double real_val = log(mag) / ln3;
+    double imag_val = arg / ln3;
 
- TritError err;
- Trit* real_int = calloc(a->len, sizeof(Trit));
- Trit* real_frac = calloc(precision, sizeof(Trit));
- Trit* imag_int = calloc(a->len, sizeof(Trit));
- Trit* imag_frac = calloc(precision, sizeof(Trit));
- if (!real_int || !real_frac || !imag_int || !imag_frac) {
- free(real_int); free(real_frac); free(imag_int); free(imag_frac);
- log_error(TRIT_ERR_MEM, "tritjs_log3_complex");
- return TRIT_ERR_MEM;
- }
+    TritError err;
+    Trit* real_int = calloc(a->len, sizeof(Trit));
+    Trit* real_frac = calloc(precision, sizeof(Trit));
+    Trit* imag_int = calloc(a->len, sizeof(Trit));
+    Trit* imag_frac = calloc(precision, sizeof(Trit));
+    if (!real_int || !real_frac || !imag_int || !imag_frac) {
+        free(real_int); free(real_frac); free(imag_int); free(imag_frac);
+        return TRIT_ERR_MEM;
+    }
 
- unsigned long r_int_part = (unsigned long)fabs(real_val);
- double r_frac_part = fabs(real_val) - r_int_part;
- for (int i = a->len - 1; i >= 0; i--) {
- real_int[i] = r_int_part % TRIT_MAX;
- r_int_part /= TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("log3", "merge");
- }
- for (int i = precision - 1; i >= 0; i--) {
- r_frac_part *= TRIT_MAX;
- real_frac[i] = (unsigned long)r_frac_part;
- r_frac_part -= (unsigned long)r_frac_part;
- operation_steps++;
- display_memory_and_stats("log3", "merge");
- }
- TritBigInt* real_bi;
- if ((err = tritbig_from_trits(real_int, a->len, real_val < 0 ? 1 : 0, &real_bi)) != TRIT_OK) goto log_cleanup;
- if ((err = tritfloat_from_bigint(real_bi, &result->real)) != TRIT_OK) goto log_cleanup;
- tritbig_free(real_bi);
- if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto log_cleanup;
- memcpy(result->real.fraction, real_frac, precision * sizeof(Trit));
- result->real.f_len = precision;
+    unsigned long r_int_part = (unsigned long)fabs(real_val);
+    double r_frac_part = fabs(real_val) - r_int_part;
+    for (int i = a->len - 1; i >= 0; i--) {
+        real_int[i] = r_int_part % TRIT_MAX;
+        r_int_part /= TRIT_MAX;
+        operation_steps++;
+        display_memory_and_stats("log3", "merge");
+    }
+    for (int i = precision - 1; i >= 0; i--) {
+        r_frac_part *= TRIT_MAX;
+        real_frac[i] = (unsigned long)r_frac_part;
+        r_frac_part -= (unsigned long)r_frac_part;
+        operation_steps++;
+        display_memory_and_stats("log3", "merge");
+    }
+    TritBigInt* real_bi;
+    if ((err = tritbig_from_trits(real_int, a->len, real_val < 0 ? 1 : 0, &real_bi)) != TRIT_OK) goto log_cleanup;
+    if ((err = tritfloat_from_bigint(real_bi, &result->real)) != TRIT_OK) goto log_cleanup;
+    tritbig_free(real_bi);
+    if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto log_cleanup;
+    memcpy(result->real.fraction, real_frac, precision * sizeof(Trit));
+    result->real.f_len = precision;
 
- unsigned long i_int_part = (unsigned long)fabs(imag_val);
- double i_frac_part = fabs(imag_val) - i_int_part;
- for (int i = a->len - 1; i >= 0; i--) {
- imag_int[i] = i_int_part % TRIT_MAX;
- i_int_part /= TRIT_MAX;
- operation_steps++;
- display_memory_and_stats("log3", "merge");
- }
- for (int i = precision - 1; i >= 0; i--) {
- i_frac_part *= TRIT_MAX;
- imag_frac[i] = (unsigned long)i_frac_part;
- i_frac_part -= (unsigned long)i_frac_part;
- operation_steps++;
- display_memory_and_stats("log3", "merge");
- }
- TritBigInt* imag_bi;
- if ((err = tritbig_from_trits(imag_int, a->len, imag_val < 0 ? 1 : 0, &imag_bi)) != TRIT_OK) goto log_cleanup;
- if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != TRIT_OK) goto log_cleanup;
- tritbig_free(imag_bi);
- if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != TRIT_OK) goto log_cleanup;
- memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
- result->imag.f_len = precision;
+    unsigned long i_int_part = (unsigned long)fabs(imag_val);
+    double i_frac_part = fabs(imag_val) - i_int_part;
+    for (int i = a->len - 1; i >= 0; i--) {
+        imag_int[i] = i_int_part % TRIT_MAX;
+        i_int_part /= TRIT_MAX;
+        operation_steps++;
+        display_memory_and_stats("log3", "merge");
+    }
+    for (int i = precision - 1; i >= 0; i--) {
+        i_frac_part *= TRIT_MAX;
+        imag_frac[i] = (unsigned long)i_frac_part;
+        i_frac_part -= (unsigned long)i_frac_part;
+        operation_steps++;
+        display_memory_and_stats("log3", "merge");
+    }
+    TritBigInt* imag_bi;
+    if ((err = tritbig_from_trits(imag_int, a->len, imag_val < 0 ? 1 : 0, &imag_bi)) != TRIT_OK) goto log_cleanup;
+    if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != TRIT_OK) goto log_cleanup;
+    tritbig_free(imag_bi);
+    if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != TRIT_OK) goto log_cleanup;
+    memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
+    result->imag.f_len = precision;
 
 log_cleanup:
- free(real_int); free(real_frac); free(imag_int); free(imag_frac);
- if (err != TRIT_OK) tritcomplex_free(*result);
- return err;
+    free(real_int); free(real_frac); free(imag_int); free(imag_frac);
+    if (err != TRIT_OK) tritcomplex_free(*result);
+    return err;
 }
 
 TritError tritjs_trig_complex(TritBigInt* a, int precision, TritComplex* result, double (*trig_func)(double)) {
- if (!a || precision <= 0 || precision > 10) {
- log_error(TRIT_ERR_PRECISION, "tritjs_trig_complex");
- return TRIT_ERR_PRECISION;
- }
- unsigned long a_val = 0;
- for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
- double pi_approx = 3.1415926535;
- double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
- double trig_val = trig_func(angle);
- int sign = trig_val < 0 ? 1 : 0;
- double abs_val = fabs(trig_val);
- unsigned long int_part = (unsigned long)abs_val;
- double frac_part = abs_val - int_part;
+    if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
+    unsigned long a_val = 0;
+    for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+    double pi_approx = 3.1415926535;
+    double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
+    double trig_val = trig_func(angle);
+    int sign = trig_val < 0 ? 1 : 0;
+    double abs_val = fabs(trig_val);
+    unsigned long int_part = (unsigned long)abs_val;
+    double frac_part = abs_val - int_part;
 
- TritError err;
- Trit* int_trits = calloc(1, sizeof(Trit));
- Trit* frac_trits = calloc(precision, sizeof(Trit));
- if (!int_trits || !frac_trits) {
- free(int_trits); free(frac_trits);
- log_error(TRIT_ERR_MEM, "tritjs_trig_complex");
- return TRIT_ERR_MEM;
- }
- int_trits[0] = int_part % TRIT_MAX;
- for (int i = precision - 1; i >= 0; i--) {
- frac_part *= TRIT_MAX;
- frac_trits[i] = (unsigned long)frac_part;
- frac_part -= (unsigned long)frac_part;
- operation_steps++;
- display_memory_and_stats("trig", "merge");
- }
- TritBigInt* real_bi;
- if ((err = tritbig_from_trits(int_trits, 1, sign, &real_bi)) != TRIT_OK) goto trig_cleanup;
- if ((err = tritfloat_from_bigint(real_bi, &result->real)) != TRIT_OK) goto trig_cleanup;
- tritbig_free(real_bi);
- if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto trig_cleanup;
- memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
- result->real.f_len = precision;
- result->imag.integer = calloc(1, sizeof(Trit));
- if (!result->imag.integer) { err = TRIT_ERR_MEM; goto trig_cleanup; }
- result->imag.i_len = 1;
- result->imag.i_mapped = 0;
- result->imag.sign = 0;
- result->imag.fraction = NULL;
- result->imag.f_len = 0;
+    TritError err;
+    Trit* int_trits = calloc(1, sizeof(Trit));
+    Trit* frac_trits = calloc(precision, sizeof(Trit));
+    if (!int_trits || !frac_trits) {
+        free(int_trits); free(frac_trits);
+        return TRIT_ERR_MEM;
+    }
+    int_trits[0] = int_part % TRIT_MAX;
+    for (int i = precision - 1; i >= 0; i--) {
+        frac_part *= TRIT_MAX;
+        frac_trits[i] = (unsigned long)frac_part;
+        frac_part -= (unsigned long)frac_part;
+        operation_steps++;
+        display_memory_and_stats("trig", "merge");
+    }
+    TritBigInt* real_bi;
+    if ((err = tritbig_from_trits(int_trits, 1, sign, &real_bi)) != TRIT_OK) goto trig_cleanup;
+    if ((err = tritfloat_from_bigint(real_bi, &result->real)) != TRIT_OK) goto trig_cleanup;
+    tritbig_free(real_bi);
+    if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != TRIT_OK) goto trig_cleanup;
+    memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
+    result->real.f_len = precision;
+    result->imag.integer = calloc(1, sizeof(Trit));
+    if (!result->imag.integer) { err = TRIT_ERR_MEM; goto trig_cleanup; }
+    result->imag.i_len = 1;
+    result->imag.i_mapped = 0;
+    result->imag.sign = 0;
+    result->imag.fraction = NULL;
+    result->imag.f_len = 0;
 
 trig_cleanup:
- free(int_trits); free(frac_trits);
- if (err != TRIT_OK) tritcomplex_free(*result);
- return err;
+    free(int_trits); free(frac_trits);
+    if (err != TRIT_OK) tritcomplex_free(*result);
+    return err;
 }
 
 TritError tritjs_sin_complex(TritBigInt* a, int precision, TritComplex* result) {
- return tritjs_trig_complex(a, precision, result, sin);
+    return tritjs_trig_complex(a, precision, result, sin);
 }
 
 TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result) {
- return tritjs_trig_complex(a, precision, result, cos);
+    return tritjs_trig_complex(a, precision, result, cos);
 }
 
 TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result) {
- if (!a || precision <= 0 || precision > 10) {
- log_error(TRIT_ERR_PRECISION, "tritjs_tan_complex");
- return TRIT_ERR_PRECISION;
- }
- unsigned long a_val = 0;
- for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
- double pi_approx = 3.1415926535;
- double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
- double tan_val = tan(angle);
- if (fabs(tan_val) > 1000.0) {
- log_error(TRIT_ERR_UNDEFINED, "tritjs_tan_complex");
- return TRIT_ERR_UNDEFINED;
- }
- return tritjs_trig_complex(a, precision, result, tan);
+    if (!a || precision <= 0 || precision > 10) return TRIT_ERR_PRECISION;
+    unsigned long a_val = 0;
+    for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+    double pi_approx = 3.1415926535;
+    double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
+    double tan_val = tan(angle);
+    if (fabs(tan_val) > 1000.0) return TRIT_ERR_UNDEFINED;
+    return tritjs_trig_complex(a, precision, result, tan);
 }
 
 TritError tritjs_pi(int* len, Trit** pi) {
- Trit pi_val[] = {1, 0, 0, 1, 0, 2, 2, 1};
- *len = 8;
- *pi = malloc(*len * sizeof(Trit));
- if (!*pi) {
- log_error(TRIT_ERR_MEM, "tritjs_pi");
- return TRIT_ERR_MEM;
- }
- memcpy(*pi, pi_val, *len * sizeof(Trit));
- operation_steps++;
- display_memory_and_stats("pi", "merge");
- return TRIT_OK;
+    Trit pi_val[] = {1, 0, 0, 1, 0, 2, 2, 1};
+    *len = 8;
+    *pi = malloc(*len * sizeof(Trit));
+    if (!*pi) return TRIT_ERR_MEM;
+    memcpy(*pi, pi_val, *len * sizeof(Trit));
+    operation_steps++;
+    display_memory_and_stats("pi", "merge");
+    return TRIT_OK;
 }
 
 @*2 Utility Functions.
 @c
 TritError tritjs_to_string(TritBigInt* bi, char** str) {
- if (!bi || bi->len <= 0) {
- log_error(TRIT_ERR_INPUT, "tritjs_to_string");
- return TRIT_ERR_INPUT;
- }
- *str = malloc(bi->len + 1 + (bi->sign ? 1 : 0));
- if (!*str) {
- log_error(TRIT_ERR_MEM, "tritjs_to_string");
- return TRIT_ERR_MEM;
- }
- char* p = *str;
- if (bi->sign) *p++ = '-';
- for (int i = 0; i < bi->len; i++) *p++ = '0' + bi->digits[i];
- *p = '\0';
- return TRIT_OK;
+    if (!bi || bi->len <= 0) return TRIT_ERR_INPUT;
+    *str = malloc(bi->len + 1 + (bi->sign ? 1 : 0));
+    if (!*str) return TRIT_ERR_MEM;
+    char* p = *str;
+    if (bi->sign) *p++ = '-';
+    for (int i = 0; i < bi->len; i++) *p++ = '0' + bi->digits[i];
+    *p = '\0';
+    return TRIT_OK;
 }
 
 TritError tritfloat_to_string(TritFloat tf, char** str) {
- if (!tf.integer || tf.i_len <= 0) {
- log_error(TRIT_ERR_INPUT, "tritfloat_to_string");
- return TRIT_ERR_INPUT;
- }
- int total_len = tf.i_len + (tf.f_len > 0 ? tf.f_len + 1 : 0) + (tf.sign ? 1 : 0);
- *str = malloc(total_len + 1);
- if (!*str) {
- log_error(TRIT_ERR_MEM, "tritfloat_to_string");
- return TRIT_ERR_MEM;
- }
- char* p = *str;
- if (tf.sign) *p++ = '-';
- for (int i = 0; i < tf.i_len; i++) *p++ = '0' + tf.integer[i];
- if (tf.f_len > 0) {
- *p++ = '.';
- for (int i = 0; i < tf.f_len; i++) *p++ = '0' + tf.fraction[i];
- }
- *p = '\0';
- return TRIT_OK;
+    if (!tf.integer || tf.i_len <= 0) return TRIT_ERR_INPUT;
+    int total_len = tf.i_len + (tf.f_len > 0 ? tf.f_len + 1 : 0) + (tf.sign ? 1 : 0);
+    *str = malloc(total_len + 1);
+    if (!*str) return TRIT_ERR_MEM;
+    char* p = *str;
+    if (tf.sign) *p++ = '-';
+    for (int i = 0; i < tf.i_len; i++) *p++ = '0' + tf.integer[i];
+    if (tf.f_len > 0) {
+        *p++ = '.';
+        for (int i = 0; i < tf.f_len; i++) *p++ = '0' + tf.fraction[i];
+    }
+    *p = '\0';
+    return TRIT_OK;
 }
 
 TritError tritcomplex_to_string(TritComplex tc, char** str) {
- char* real_str, *imag_str;
- TritError err;
- if ((err = tritfloat_to_string(tc.real, &real_str)) != TRIT_OK) return err;
- if ((err = tritfloat_to_string(tc.imag, &imag_str)) != TRIT_OK) {
- free(real_str);
- return err;
- }
- int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
- if (imag_zero) {
- *str = real_str;
- free(imag_str);
- return TRIT_OK;
- }
- *str = malloc(strlen(real_str) + strlen(imag_str) + 4);
- if (!*str) {
- free(real_str);
- free(imag_str);
- log_error(TRIT_ERR_MEM, "tritcomplex_to_string");
- return TRIT_ERR_MEM;
- }
- sprintf(*str, "%s %si", real_str, imag_str);
- free(real_str);
- free(imag_str);
- return TRIT_OK;
-}
-
-TritError net_listen(const char* ip, int port) {
- int sock = socket(AF_INET, SOCK_STREAM, 0);
- if (sock < 0) {
- log_error(TRIT_ERR_NETWORK, "net_listen: socket creation");
- return TRIT_ERR_NETWORK;
- }
-
- struct sockaddr_in addr;
- addr.sin_family = AF_INET;
- addr.sin_port = htons(port);
- if (inet_pton(AF_INET, ip, &addr.sin_addr) <= 0) {
- close(sock);
- log_error(TRIT_ERR_NETWORK, "net_listen: invalid IP");
- return TRIT_ERR_NETWORK;
- }
-
- if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
- close(sock);
- log_error(TRIT_ERR_NETWORK, "net_listen: bind");
- return TRIT_ERR_NETWORK;
- }
- if (listen(sock, 5) < 0) {
- close(sock);
- log_error(TRIT_ERR_NETWORK, "net_listen: listen");
- return TRIT_ERR_NETWORK;
- }
-
- printf("Listening on %s:%d\n", ip, port);
- char buffer[MAX_INPUT];
- while (1) {
- int client = accept(sock, NULL, NULL);
- if (client < 0) {
- log_error(TRIT_ERR_NETWORK, "net_listen: accept");
- continue;
- }
- int len = recv(client, buffer, sizeof(buffer) - 1, 0);
- if (len > 0) {
- buffer[len] = '\0';
- add_to_history(buffer);
- printf("Received: %s\n", buffer);
- }
- close(client);
- }
- close(sock);
- return TRIT_OK;
-}
-
-TritError export_json(const char* filename) {
- FILE* f = fopen(filename, "w");
- if (!f) {
- log_error(TRIT_ERR_INPUT, "export_json: file open");
- return TRIT_ERR_INPUT;
- }
-
- fprintf(f, "{\n \"history\": [");
- for (int i = 0; i < history_count; i++) {
- fprintf(f, "%s\"%s\"", i == 0 ? "" : ", ", history[i]);
- }
- fprintf(f, "],\n \"variables\": {\n");
- int first_var = 1;
- for (int i = 0; i < 26; i++) {
- if (variables[i]) {
- char* str;
- if (tritjs_to_string(variables[i], &str) == TRIT_OK) {
- fprintf(f, "%s \"%c\": \"%s\"", first_var ? "" : ",\n", 'A' + i, str);
- free(str);
- first_var = 0;
- }
- }
- }
- fprintf(f, "\n },\n \"test\": {\n \"active\": %d,\n \"score\": %d,\n \"answered\": %d,\n \"answers\": {", test_active, test_score, questions_answered);
- int first_ans = 1;
- for (int i = 0; i < MAX_QUESTIONS; i++) {
- if (test_answers[i]) {
- fprintf(f, "%s \"%d\": %d", first_ans ? "" : ",", i, test_answers[i]);
- first_ans = 0;
- }
- }
- fprintf(f, "\n }\n }\n}\n");
- fclose(f);
- return TRIT_OK;
+    char* real_str, *imag_str;
+    TritError err;
+    if ((err = tritfloat_to_string(tc.real, &real_str)) != TRIT_OK) return err;
+    if ((err = tritfloat_to_string(tc.imag, &imag_str)) != TRIT_OK) {
+        free(real_str);
+        return err;
+    }
+    int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
+    if (imag_zero) {
+        *str = real_str;
+        free(imag_str);
+        return TRIT_OK;
+    }
+    *str = malloc(strlen(real_str) + strlen(imag_str) + 4);
+    if (!*str) {
+        free(real_str);
+        free(imag_str);
+        return TRIT_ERR_MEM;
+    }
+    sprintf(*str, "%s %si", real_str, imag_str);
+    free(real_str);
+    free(imag_str);
+    return TRIT_OK;
 }
 
 @*2 CLI for CISA with AI-Driven Stats, Scripting, and Save/Load.
 @c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
- if (!str || !strlen(str) || strlen(str) > MAX_INPUT) {
- log_error(TRIT_ERR_INPUT, "parse_trit_string");
- return TRIT_ERR_INPUT;
- }
- int sign = (str[0] == '-') ? 1 : 0;
- const char* mag = sign ? str + 1 : str;
- int len = strlen(mag);
- Trit* trits = malloc(len * sizeof(Trit));
- if (!trits) {
- log_error(TRIT_ERR_MEM, "parse_trit_string");
- return TRIT_ERR_MEM;
- }
- for (int i = 0; i < len; i++) {
- if (mag[i] < '0' || mag[i] > '2') {
- free(trits);
- log_error(TRIT_ERR_INPUT, "parse_trit_string: invalid trit");
- return TRIT_ERR_INPUT;
- }
- trits[i] = mag[i] - '0';
- }
- TritError err = tritbig_from_trits(trits, len, sign, bi);
- free(trits);
- return err;
-}
-
-static const char* test_questions[MAX_QUESTIONS][6] = {
- {"What are the digits in ternary?", "0,1,2,3", "0,1,2", "0,1", "1,2,3", "2"},
- {"Decimal value of 120 ternary?", "3", "12", "15", "18", "3"},
- {"Application of TritJS-CISA?", "Weather", "Cybersecurity", "Games", "Finance", "2"},
- {"101 ternary to decimal?", "10", "11", "12", "13", "1"},
- {"1101 binary to ternary?", "21", "111", "102", "120", "3"},
- {"What is 1 + 2 in ternary?", "3", "10", "12", "11", "2"},
- {"What happens when you add 2 + 2 in ternary?", "Remains 2", "Becomes 4", "Carries over to 11", "Becomes 10", "3"},
- {"Perform 12 + 21 in ternary:", "100", "110", "101", "33", "1"},
- {"What is the sum of 102 + 11 in ternary?", "120", "110", "111", "200", "1"},
- {"In TritJS-CISA, what does operation_steps++ track?", "Memory", "Additions", "Carries", "Steps", "4"},
- {"What is 2 - 1 in ternary?", "0", "1", "2", "10", "2"},
- {"What happens when subtracting 1 - 2?", "Borrow", "Negative", "Always 1", "No borrow", "1"},
- {"Compute 21 - 12 in ternary:", "2", "10", "12", "1", "2"},
- {"What is 100 - 11 in ternary?", "22", "12", "21", "11", "3"},
- {"How does tritjs_subtract_big handle borrowing?", "Adds negative", "Direct subtract", "Decimal", "Ignores", "1"},
- {"What is 2 × 2 in ternary?", "4", "11", "10", "20", "2"},
- {"What is 12 × 2 in ternary?", "22", "111", "101", "24", "3"},
- {"Compute 11 × 10 in ternary:", "110", "100", "120", "210", "1"},
- {"What does tritjs_multiply_big do when product exceeds 2?", "Discards", "Carries", "Decimal", "Error", "2"},
- {"Multiply 102 × 2 in ternary:", "211", "201", "210", "220", "1"},
- {"What is 10 ÷ 2 in ternary?", "1", "2", "11", "10", "2"},
- {"How are remainders handled in division?", "Ignored", "Binary", "Fractions", "None", "3"},
- {"Divide 21 ÷ 2 in ternary:", "10.1", "11", "10", "12", "1"},
- {"Quotient of 102 ÷ 11 in ternary?", "2", "10", "12", "20", "2"},
- {"Perform 210 ÷ 12 in ternary:", "12", "11", "20", "10", "1"},
- {"What is 2² in ternary?", "10", "11", "12", "20", "2"},
- {"What is log₃(9) in ternary?", "10", "2", "11", "12", "1"},
- {"Compute 3! in ternary:", "20", "12", "11", "10", "1"},
- {"What is √12 in ternary (approx 1 trit)?", "10", "11", "20", "12", "2"},
- {"What limits factorial in TritJS-CISA?", "Memory", "Input > 20", "Precision", "Negatives", "2"},
- {"Solve X + 12 = 21 in ternary:", "1", "10", "11", "20", "2"},
- {"Solve Y × 2 = 11 in ternary:", "2", "10", "1", "12", "2"},
- {"Solve X - 10 = 2 in ternary:", "11", "12", "20", "10", "2"},
- {"Solve X + Y = 12 and X × Y = 21:", "X=10,Y=2", "X=11,Y=1", "X=12,Y=0", "No solution", "2"},
- {"How does TritJS-CISA handle variables?", "Decimal", "store_variable", "Binary", "Ignores", "2"},
- {"Advantage of ternary computing?", "Less energy", "Binary gates", "Quantum", "No use", "1"},
- {"Field benefiting from TritJS-CISA?", "Cybersecurity", "AI", "Compression", "All", "4"},
- {"How does ternary improve cybersecurity?", "Faster", "Compact", "Obfuscation", "Simpler", "3"},
- {"Ternary sum 210 + 122?", "1002", "1102", "1021", "1111", "2"},
- {"What does save_state enable?", "Real-time", "Persistence", "Binary", "Sorting", "2"}
-};
-
-void display_test_question(int qnum) {
- if (qnum < 0 || qnum >= MAX_QUESTIONS) {
- printf("Error: Invalid question number\n");
- return;
- }
- printf("\nQuestion %d: %s\n", qnum + 1, test_questions[qnum][0]);
- printf("a) %s\nb) %s\nc) %s\nd) %s\nEnter answer (1-4): ", 
- test_questions[qnum][1], test_questions[qnum][2], 
- test_questions[qnum][3], test_questions[qnum][4]);
-}
-
-int check_test_answer(int qnum, int user_answer) {
- if (qnum < 0 || qnum >= MAX_QUESTIONS || user_answer < 1 || user_answer > 4) return 0;
- int correct_answer = atoi(test_questions[qnum][5]);
- return (user_answer == correct_answer) ? 1 : 0;
-}
-
-void learn_topic(const char* topic) {
-    if (strcmp(topic, "ADD") == 0) {
-        printf("Lesson: Ternary Addition\n");
-        printf("In ternary (base-3), digits are 0, 1, 2. Example: 12 + 2\n");
-        printf("Step 1: Align right:  12\n");
-        printf("                    +  2\n");
-        printf("Step 2: Add columns:\n");
-        printf("  Units: 2 + 2 = 11 (3¹×1 + 3⁰×1 = 4 decimal, carry 1)\n");
-        printf("  Threes: 1 + 0 + carry 1 = 2\n");
-        printf("Result: 21 (3¹×2 + 3⁰×1 = 7 decimal)\n");
-        printf("Try: 'add 12 2' in the CLI.\n");
-    } else if (strcmp(topic, "SUB") == 0) {
-        printf("Lesson: Ternary Subtraction\n");
-        printf("Example: 21 - 12\n");
-        printf("Step 1: Align right:  21\n");
-        printf("                    - 12\n");
-        printf("Step 2: Subtract with borrowing:\n");
-        printf("  Units: 1 - 2 = borrow 1 from 2, becomes 11 - 2 = 2\n");
-        printf("  Threes: 1 - 1 = 0\n");
-        printf("Result: 2 (3⁰×2 = 2 decimal)\n");
-        printf("Try: 'sub 21 12' in the CLI.\n");
-    } else if (strcmp(topic, "MUL") == 0) {
-        printf("Lesson: Ternary Multiplication\n");
-        printf("Example: 11 × 10\n");
-        printf("Step 1: Multiply each digit:\n");
-        printf("  11 × 0 = 00\n");
-        printf("  11 × 1 = 11 (shifted left)\n");
-        printf("Step 2: Add:  00\n");
-        printf("             + 11\n");
-        printf("Result: 110 (3²×1 + 3¹×1 = 12 decimal)\n");
-        printf("Try: 'mul 11 10' in the CLI.\n");
-    } else {
-        printf("Error: Unknown topic. Try 'LEARN ADD', 'LEARN SUB', or 'LEARN MUL'.\n");
+    if (!str || !strlen(str)) return TRIT_ERR_INPUT;
+    if (strlen(str) > 256) return TRIT_ERR_INPUT;
+    int sign = (str[0] == '-') ? 1 : 0;
+    const char* mag = sign ? str + 1 : str;
+    int len = strlen(mag);
+    Trit* trits = malloc(len * sizeof(Trit));
+    if (!trits) return TRIT_ERR_MEM;
+    for (int i = 0; i < len; i++) {
+        if (mag[i] < '0' || mag[i] > '2') {
+            free(trits);
+            return TRIT_ERR_INPUT;
+        }
+        trits[i] = mag[i] - '0';
     }
+    TritError err = tritbig_from_trits(trits, len, sign, bi);
+    free(trits);
+    return err;
+}
+
+void print_help() {
+    printf("\n=== TritJS-CISA Commands ===\n");
+    printf("Arithmetic:\n");
+    printf("  add <a> <b>  - Add two ternary numbers\n");
+    printf("  sub <a> <b>  - Subtract b from a\n");
+    printf("  mul <a> <b>  - Multiply a and b\n");
+    printf("  div <a> <b>  - Divide a by b\n");
+    printf("  pow <a> <b>  - Raise a to power b\n");
+    printf("  fact <a>     - Factorial of a\n");
+    printf("Scientific:\n");
+    printf("  sqrt <a>     - Square root of a\n");
+    printf("  log3 <a>     - Base-3 logarithm of a\n");
+    printf("  sin <a>      - Sine of a\n");
+    printf("  cos <a>      - Cosine of a\n");
+    printf("  tan <a>      - Tangent of a\n");
+    printf("  pi           - Pi in base-3\n");
+    printf("Stats:\n");
+    printf("  stats [quick|merge] - Show mean, mode, median (auto-selects if omitted)\n");
+    printf("Memory:\n");
+    printf("  <A-Z>=<val>  - Store value in variable (e.g., A=12)\n");
+    printf("  recall <n>   - Recall nth last result (0 = latest)\n");
+    printf("  clear        - Clear history, variables, and scripts\n");
+    printf("Storage:\n");
+    printf("  save <file>  - Save state to file (.trit)\n");
+    printf("  load <file>  - Load state from file (.trit)\n");
+    printf("Scripting:\n");
+    printf("  PROG <name> {<cmds>} - Define script (e.g., PROG LOOP {add A 1; A=A})\n");
+    printf("  RUN <name>   - Run named script\n");
+    printf("General:\n");
+    printf("  help         - Show this help\n");
+    printf("  quit         - Exit\n");
+    printf("====================\n");
 }
 
 TritError execute_command(const char* input, int is_script) {
-    char op[10], arg1[MAX_INPUT], arg2[MAX_INPUT] = "";
+    char op[10], arg1[256], arg2[256] = "";
     int parsed = sscanf(input, "%9s %255s %255s", op, arg1, arg2);
-    if (parsed < 1 || (parsed >= 2 && strlen(arg1) >= MAX_INPUT) || (arg2[0] && strlen(arg2) >= MAX_INPUT)) {
-        if (!is_script) printf("Error: Invalid format or input too long\n");
-        log_error(TRIT_ERR_INPUT, "execute_command: parsing");
+    if (parsed < 2 || strlen(arg1) > 255 || (arg2[0] && strlen(arg2) > 255)) {
+        if (!is_script) printf("Error: Input too long or invalid format\n");
         return TRIT_ERR_INPUT;
     }
 
@@ -1489,8 +1036,7 @@ TritError execute_command(const char* input, int is_script) {
     TritBigInt* b = NULL;
     TritError err;
 
-    /* Variable assignment */
-    if (parsed == 2 && strchr(arg1, '=') && !arg2[0]) {
+    if (strchr(arg1, '=') && !arg2[0]) {
         char var_name[2] = {arg1[0], '\0'};
         char* value = strchr(arg1, '=') + 1;
         if ((err = parse_trit_string(value, &a)) != TRIT_OK) {
@@ -1502,38 +1048,32 @@ TritError execute_command(const char* input, int is_script) {
         return TRIT_OK;
     }
 
-    /* Variable recall or parsing arguments */
-    if (parsed >= 2) {
-        if (arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0') {
-            a = recall_variable(arg1);
-            if (!a) {
-                if (!is_script) printf("Error: Variable %s not set\n", arg1);
-                log_error(TRIT_ERR_INPUT, "execute_command: variable not set");
+    if (arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0') {
+        a = recall_variable(arg1);
+        if (!a) {
+            if (!is_script) printf("Error: Variable %s not set\n", arg1);
+            return TRIT_ERR_INPUT;
+        }
+    } else if ((err = parse_trit_string(arg1, &a)) != TRIT_OK) {
+        if (!is_script) printf("Error: %s\n", trit_error_str(err));
+        return err;
+    }
+    if (strlen(arg2) > 0) {
+        if (arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0') {
+            b = recall_variable(arg2);
+            if (!b) {
+                if (!is_script) printf("Error: Variable %s not set\n", arg2);
+                tritbig_free(a);
                 return TRIT_ERR_INPUT;
             }
-        } else if ((err = parse_trit_string(arg1, &a)) != TRIT_OK) {
+        } else if ((err = parse_trit_string(arg2, &b)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
+            tritbig_free(a);
             return err;
-        }
-        if (strlen(arg2) > 0) {
-            if (arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0') {
-                b = recall_variable(arg2);
-                if (!b) {
-                    if (!is_script) printf("Error: Variable %s not set\n", arg2);
-                    tritbig_free(a);
-                    log_error(TRIT_ERR_INPUT, "execute_command: variable not set");
-                    return TRIT_ERR_INPUT;
-                }
-            } else if ((err = parse_trit_string(arg2, &b)) != TRIT_OK) {
-                if (!is_script) printf("Error: %s\n", trit_error_str(err));
-                tritbig_free(a);
-                return err;
-            }
         }
     }
 
-    /* Arithmetic Commands */
-    if ((strcmp(op, "add") == 0 || strcmp(op, "a") == 0) && b) {
+    if (strcmp(op, "add") == 0 && b) {
         TritBigInt* result;
         if ((err = tritjs_add_big(a, b, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1548,7 +1088,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritbig_free(result);
         }
-    } else if ((strcmp(op, "sub") == 0 || strcmp(op, "s") == 0) && b) {
+    } else if (strcmp(op, "sub") == 0 && b) {
         TritBigInt* result;
         if ((err = tritjs_subtract_big(a, b, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1563,7 +1103,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritbig_free(result);
         }
-    } else if ((strcmp(op, "mul") == 0 || strcmp(op, "m") == 0) && b) {
+    } else if (strcmp(op, "mul") == 0 && b) {
         TritBigInt* result;
         if ((err = tritjs_multiply_big(a, b, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1578,7 +1118,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritbig_free(result);
         }
-    } else if ((strcmp(op, "div") == 0 || strcmp(op, "d") == 0) && b) {
+    } else if (strcmp(op, "div") == 0 && b) {
         TritDivResult result = {{0}, {0}};
         if ((err = tritjs_divide_big(a, b, &result, 3)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1598,7 +1138,7 @@ TritError execute_command(const char* input, int is_script) {
             tritfloat_free(result.quotient);
             tritfloat_free(result.remainder);
         }
-    } else if ((strcmp(op, "pow") == 0 || strcmp(op, "p") == 0) && b) {
+    } else if (strcmp(op, "pow") == 0 && b) {
         TritBigInt* result;
         if ((err = tritjs_power_big(a, b, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1613,7 +1153,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritbig_free(result);
         }
-    } else if ((strcmp(op, "fact") == 0 || strcmp(op, "f") == 0) && parsed == 2) {
+    } else if (strcmp(op, "fact") == 0) {
         TritBigInt* result;
         if ((err = tritjs_factorial_big(a, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1628,9 +1168,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritbig_free(result);
         }
-    } 
-    /* Scientific Commands */
-    else if (strcmp(op, "sqrt") == 0 && parsed == 2) {
+    } else if (strcmp(op, "sqrt") == 0) {
         TritComplex result;
         if ((err = tritjs_sqrt_complex(a, 3, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1645,7 +1183,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritcomplex_free(result);
         }
-    } else if (strcmp(op, "log3") == 0 && parsed == 2) {
+    } else if (strcmp(op, "log3") == 0) {
         TritComplex result;
         if ((err = tritjs_log3_complex(a, 3, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1660,7 +1198,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritcomplex_free(result);
         }
-    } else if (strcmp(op, "sin") == 0 && parsed == 2) {
+    } else if (strcmp(op, "sin") == 0) {
         TritComplex result;
         if ((err = tritjs_sin_complex(a, 3, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1675,7 +1213,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritcomplex_free(result);
         }
-    } else if (strcmp(op, "cos") == 0 && parsed == 2) {
+    } else if (strcmp(op, "cos") == 0) {
         TritComplex result;
         if ((err = tritjs_cos_complex(a, 3, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1690,7 +1228,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritcomplex_free(result);
         }
-    } else if (strcmp(op, "tan") == 0 && parsed == 2) {
+    } else if (strcmp(op, "tan") == 0) {
         TritComplex result;
         if ((err = tritjs_tan_complex(a, 3, &result)) != TRIT_OK) {
             if (!is_script) printf("Error: %s\n", trit_error_str(err));
@@ -1705,7 +1243,7 @@ TritError execute_command(const char* input, int is_script) {
             }
             tritcomplex_free(result);
         }
-    } else if (strcmp(op, "pi") == 0 && parsed == 1) {
+    } else if (strcmp(op, "pi") == 0) {
         int len;
         Trit* pi;
         if ((err = tritjs_pi(&len, &pi)) != TRIT_OK) {
@@ -1723,156 +1261,8 @@ TritError execute_command(const char* input, int is_script) {
             }
             free(pi);
         }
-    }
-    /* Recall Command */
-    else if ((strcmp(op, "recall") == 0 || strcmp(op, "rc") == 0) && parsed == 2) {
-        int index = atoi(arg1);
-        char* recalled = recall_history(index);
-        if (recalled) {
-            if (!is_script) printf("%s\n", recalled);
-            free(recalled);
-        } else {
-            if (!is_script) printf("Error: Invalid history index\n");
-            err = TRIT_ERR_INPUT;
-        }
-    } 
-    else if (strcmp(op, "LEARN") == 0 && parsed == 2) {
-        learn_topic(arg1);
-        err = TRIT_OK;
-    } 
-    else if (strcmp(op, "TEST") == 0 && parsed == 2) {
-        int week = atoi(arg1);
-        if (week < 1 || week > 8) {
-            if (!is_script) printf("Error: Invalid week (1-8)\n");
-            log_error(TRIT_ERR_INPUT, "execute_command: TEST invalid week");
-            err = TRIT_ERR_INPUT;
-        } else {
-            test_active = week;
-            int start_q = (week - 1) * QUESTIONS_PER_WEEK;
-            if (!is_script) {
-                printf("Starting Week %d Test. Use 'CHECK <qnum> <answer>' to submit answers.\n", week);
-                for (int i = 0; i < QUESTIONS_PER_WEEK; i++) {
-                    display_test_question(start_q + i);
-                    printf("(Previously answered: %d)\n", test_answers[start_q + i]);
-                }
-            }
-            err = TRIT_OK;
-        }
-    } 
-    else if (strcmp(op, "CHECK") == 0 && parsed == 3) {
-        if (!test_active) {
-            if (!is_script) printf("Error: No test active. Use 'TEST <week>' first.\n");
-            err = TRIT_ERR_INPUT;
-        } else {
-            int qnum = atoi(arg1);
-            int answer = atoi(arg2);
-            if (qnum < 1 || qnum > QUESTIONS_PER_WEEK || answer < 1 || answer > 4) {
-                if (!is_script) printf("Error: Invalid format. Use 'CHECK <qnum> <answer>' (qnum 1-5, answer 1-4)\n");
-                log_error(TRIT_ERR_INPUT, "execute_command: CHECK format");
-                err = TRIT_ERR_INPUT;
-            } else {
-                int global_qnum = (test_active - 1) * QUESTIONS_PER_WEEK + (qnum - 1);
-                if (test_answers[global_qnum] == 0) questions_answered++;
-                test_answers[global_qnum] = answer;
-                int correct = check_test_answer(global_qnum, answer);
-                if (correct && test_answers[global_qnum] == answer && questions_answered <= QUESTIONS_PER_WEEK) test_score++;
-                if (!is_script) printf("Answer recorded. Correct: %s\n", correct ? "Yes" : "No");
-                err = TRIT_OK;
-            }
-        }
-    } 
-    else if (strcmp(op, "SCORE") == 0 && parsed == 1) {
-        if (!test_active) {
-            if (!is_script) printf("Error: No test active. Start with 'TEST <week>'\n");
-            err = TRIT_ERR_INPUT;
-        } else {
-            if (!is_script) {
-                printf("Week %d Test Score: %d/%d (%.2f%%)\n", test_active, test_score, QUESTIONS_PER_WEEK, 
-                       (float)test_score / QUESTIONS_PER_WEEK * 100);
-                if (test_score == QUESTIONS_PER_WEEK) printf("Congratulations! Certified for Week %d!\n", test_active);
-            }
-            err = TRIT_OK;
-        }
-    } 
-    else if (strcmp(op, "PROG") == 0 && parsed >= 2) {
-        char script_name[MAX_SCRIPT_NAME];
-        char* brace_start = strchr(input, '{');
-        char* brace_end = strrchr(input, '}');
-        if (!brace_start || !brace_end || script_count >= 100) {
-            if (!is_script) printf("Error: Invalid script syntax or too many scripts (max 100)\n");
-            log_error(TRIT_ERR_SCRIPT, "execute_command: PROG syntax or limit");
-            err = TRIT_ERR_SCRIPT;
-        } else {
-            sscanf(input + 5, "%19s", script_name);
-            Script* script = &scripts[script_count];
-            strncpy(script->name, script_name, MAX_SCRIPT_NAME - 1);
-            script->name[MAX_SCRIPT_NAME - 1] = '\0';
-            script->cmd_count = 0;
-
-            char* cmd_start = brace_start + 1;
-            while (cmd_start < brace_end && script->cmd_count < MAX_SCRIPT_CMDS) {
-                char* cmd_end = strchr(cmd_start, ';');
-                if (!cmd_end || cmd_end > brace_end) cmd_end = brace_end;
-                int len = cmd_end - cmd_start;
-                while (*cmd_start == ' ' && len > 0) { cmd_start++; len--; }
-                if (len > 0) {
-                    if (len >= MAX_INPUT) len = MAX_INPUT - 1;
-                    strncpy(script->commands[script->cmd_count], cmd_start, len);
-                    script->commands[script->cmd_count][len] = '\0';
-                    script->cmd_count++;
-                }
-                cmd_start = cmd_end + 1;
-            }
-            script_count++;
-            if (!is_script) printf("Script '%s' defined\n", script_name);
-            err = TRIT_OK;
-        }
-    } 
-    else if ((strcmp(op, "RUN") == 0 || strcmp(op, "r") == 0) && parsed == 2) {
-        Script* script = find_script(arg1);
-        if (!script) {
-            if (!is_script) printf("Error: Script '%s' not found\n", arg1);
-            log_error(TRIT_ERR_SCRIPT, "execute_command: RUN script not found");
-            err = TRIT_ERR_SCRIPT;
-        } else {
-            if ((err = run_script(script)) == TRIT_OK) {
-                if (!is_script) printf("Script '%s' executed\n", arg1);
-            } else {
-                if (!is_script) printf("Error: Script execution failed\n");
-            }
-        }
-    } 
-    else if (strcmp(op, "NET") == 0 && parsed == 3) {
-        char ip[16];
-        int port = atoi(arg2);
-        if (sscanf(input + 4, "%15s %d", ip, &port) != 2 || port < 1 || port > 65535) {
-            if (!is_script) printf("Error: Usage: NET <ip> <port> (e.g., NET 127.0.0.1 8080)\n");
-            log_error(TRIT_ERR_INPUT, "execute_command: NET format");
-            err = TRIT_ERR_INPUT;
-        } else {
-            pthread_t net_thread;
-            struct NetArgs { char ip[16]; int port; } args;
-            strncpy(args.ip, ip, 16);
-            args.ip[15] = '\0';
-            args.port = port;
-            if (pthread_create(&net_thread, NULL, (void*(*)(void*))net_listen, &args) != 0) {
-                if (!is_script) printf("Error: Failed to start network thread\n");
-                log_error(TRIT_ERR_NETWORK, "execute_command: NET thread");
-                err = TRIT_ERR_NETWORK;
-            } else {
-                pthread_detach(net_thread); /* Run in background */
-                if (!is_script) printf("Network thread started\n");
-                err = TRIT_OK;
-            }
-        }
-    } 
-    else if ((strcmp(op, "export") == 0 || strcmp(op, "json") == 0) && parsed == 2) {
-        if ((err = export_json(arg1)) == TRIT_OK) {
-            if (!is_script) printf("Exported to %s in JSON format\n", arg1);
-        }
-    } 
-    else {
-        if (!is_script) printf("Error: Unknown command or invalid arguments\n");
+    } else {
+        if (!is_script) printf("Error: Unknown command\n");
         err = TRIT_ERR_INPUT;
     }
 
@@ -1885,16 +1275,14 @@ TritError run_script(Script* script) {
     for (int i = 0; i < script->cmd_count; i++) {
         char* cmd = script->commands[i];
         if (strncmp(cmd, "IF ", 3) == 0) {
-            char cond[MAX_INPUT], then_cmd[MAX_INPUT];
+            char cond[256], then_cmd[256];
             if (sscanf(cmd, "IF %255s THEN %255[^\n]", cond, then_cmd) != 2) {
                 printf("Script Error: Invalid IF syntax\n");
-                log_error(TRIT_ERR_SCRIPT, "run_script: IF syntax");
                 return TRIT_ERR_SCRIPT;
             }
             TritBigInt* cond_val;
             if (parse_trit_string(cond, &cond_val) != TRIT_OK) {
                 printf("Script Error: Invalid condition\n");
-                log_error(TRIT_ERR_SCRIPT, "run_script: IF condition");
                 return TRIT_ERR_SCRIPT;
             }
             int val = 0;
@@ -1904,16 +1292,14 @@ TritError run_script(Script* script) {
                 if (execute_command(then_cmd, 1) != TRIT_OK) return TRIT_ERR_SCRIPT;
             }
         } else if (strncmp(cmd, "FOR ", 4) == 0) {
-            char var[2], start_str[MAX_INPUT], end_str[MAX_INPUT], loop_cmd[MAX_INPUT];
+            char var[2], start_str[256], end_str[256], loop_cmd[256];
             if (sscanf(cmd, "FOR %1s %255s %255s %255[^\n]", var, start_str, end_str, loop_cmd) != 4) {
                 printf("Script Error: Invalid FOR syntax\n");
-                log_error(TRIT_ERR_SCRIPT, "run_script: FOR syntax");
                 return TRIT_ERR_SCRIPT;
             }
             TritBigInt *start, *end;
             if (parse_trit_string(start_str, &start) != TRIT_OK || parse_trit_string(end_str, &end) != TRIT_OK) {
                 printf("Script Error: Invalid FOR range\n");
-                log_error(TRIT_ERR_SCRIPT, "run_script: FOR range");
                 return TRIT_ERR_SCRIPT;
             }
             int start_val = 0, end_val = 0;
@@ -1944,71 +1330,26 @@ TritError run_script(Script* script) {
     return TRIT_OK;
 }
 
-void print_help() {
-    printf("\n=== TritJS-CISA Commands ===\n");
-    printf("Arithmetic:\n");
-    printf("  add/a <a> <b>  - Add two ternary numbers\n");
-    printf("  sub/s <a> <b>  - Subtract b from a\n");
-    printf("  mul/m <a> <b>  - Multiply a and b\n");
-    printf("  div/d <a> <b>  - Divide a by b\n");
-    printf("  pow/p <a> <b>  - Raise a to power b\n");
-    printf("  fact/f <a>     - Factorial of a\n");
-    printf("Scientific:\n");
-    printf("  sqrt <a>       - Square root of a\n");
-    printf("  log3 <a>       - Base-3 logarithm of a\n");
-    printf("  sin <a>        - Sine of a\n");
-    printf("  cos <a>        - Cosine of a\n");
-    printf("  tan <a>        - Tangent of a\n");
-    printf("  pi             - Pi in base-3\n");
-    printf("Stats:\n");
-    printf("  stats [quick|merge] - Show mean, mode, median (auto-selects if omitted)\n");
-    printf("Memory:\n");
-    printf("  <A-Z>=<val>    - Store value in variable (e.g., A=12)\n");
-    printf("  recall/rc <n>  - Recall nth last result (0 = latest)\n");
-    printf("  clear/cl       - Clear history, variables, and scripts\n");
-    printf("Storage:\n");
-    printf("  save/sv <file> <key> - Save encrypted state to file (.trit)\n");
-    printf("  load/ld <file> <key> - Load encrypted state from file (.trit)\n");
-    printf("  export/json <file>   - Export state to JSON\n");
-    printf("Networking:\n");
-    printf("  NET <ip> <port>      - Listen for ternary data (e.g., NET 127.0.0.1 8080)\n");
-    printf("Scripting:\n");
-    printf("  PROG <name> {<cmds>} - Define script (e.g., PROG LOOP {add A 1; A=A})\n");
-    printf("  RUN/r <name>         - Run named script\n");
-    printf("Education:\n");
-    printf("  LEARN <topic>        - Learn a topic (e.g., ADD, SUB, MUL)\n");
-    printf("  TEST <week>          - Start test for week (1-8)\n");
-    printf("  CHECK <qnum> <ans>   - Submit test answer (qnum 1-5, ans 1-4)\n");
-    printf("  SCORE                - Show test score\n");
-    printf("General:\n");
-    printf("  help/h               - Show this help\n");
-    printf("  quit/q               - Exit\n");
-    printf("====================\n");
-}
-
 void run_calculator() {
     init_audit_log();
-    char input[MAX_INPUT];
-    printf("=== TritJS-CISA Ternary Cybersecurity Tool ===\n");
+    char input[256], op[10], arg1[256], arg2[256] = "";
+    printf("=== TritJS-CISA Ternary Calculator ===\n");
     printf("Type 'help' for commands\n");
     while (1) {
-        pthread_mutex_lock(&mutex);
         total_mapped_bytes = 0;
         operation_steps = 0;
-        pthread_mutex_unlock(&mutex);
         printf("> ");
-        if (!fgets(input, MAX_INPUT, stdin)) break;
+        if (!fgets(input, 256, stdin)) break;
         input[strcspn(input, "\n")] = 0;
         if (audit_log) fprintf(audit_log, "[%ld] Command: %s\n", time(NULL), input);
-
-        if (strcmp(input, "quit") == 0 || strcmp(input, "q") == 0) break;
-        if (strcmp(input, "help") == 0 || strcmp(input, "h") == 0) {
+        if (strcmp(input, "quit") == 0) break;
+        if (strcmp(input, "help") == 0) {
             print_help();
             continue;
         }
-        if (strcmp(input, "clear") == 0 || strcmp(input, "cl") == 0) {
+        if (strcmp(input, "clear") == 0) {
             clear_history_and_vars();
-            printf("History, variables, scripts, and test state cleared\n");
+            printf("History, variables, and scripts cleared\n");
             continue;
         }
         if (strncmp(input, "stats", 5) == 0) {
@@ -2018,105 +1359,56 @@ void run_calculator() {
                 printf("Error: Sort method must be 'quick', 'merge', or omitted (auto)\n");
                 continue;
             }
-            display_memory_and_stats("stats", sort_method);
-            continue;
-        }
-        if (strncmp(input, "save ", 5) == 0 || strncmp(input, "sv ", 3) == 0) {
-            char filename[MAX_FILENAME], key[AES_KEYLEN + 1];
-            if (sscanf(input + (input[1] == 'v' ? 3 : 5), "%255s %32s", filename, key) != 2) {
-                printf("Error: Usage: save <file> <key> (key max 32 chars)\n");
-                continue;
+            double mean = 0.0;
+            int trit_counts[TRIT_MAX] = {0}, max_count = 0, mode = -1, total_trits = 0;
+            int* all_trits = NULL;
+            for (int i = 0; i < history_count; i++) {
+                TritBigInt* bi;
+                if (parse_trit_string(history[i], &bi) == TRIT_OK) {
+                    all_trits = realloc(all_trits, (total_trits + bi->len) * sizeof(int));
+                    for (int j = 0; j < bi->len; j++) {
+                        mean += bi->digits[j];
+                        trit_counts[bi->digits[j]]++;
+                        all_trits[total_trits + j] = bi->digits[j];
+                    }
+                    total_trits += bi->len;
+                    tritbig_free(bi);
+                }
             }
-            if (save_state_encrypted(filename, key) == TRIT_OK) printf("State saved to %s\n", filename);
-            continue;
-        }
-        if (strncmp(input, "load ", 5) == 0 || strncmp(input, "ld ", 3) == 0) {
-            char filename[MAX_FILENAME], key[AES_KEYLEN + 1];
-            if (sscanf(input + (input[1] == 'd' ? 3 : 5), "%255s %32s", filename, key) != 2) {
-                printf("Error: Usage: load <file> <key> (key max 32 chars)\n");
-                continue;
+            if (total_trits > 0) mean /= total_trits;
+            for (int i = 0; i < TRIT_MAX; i++) {
+                if (trit_counts[i] > max_count) {
+                    max_count = trit_counts[i];
+                    mode = i;
+                }
             }
-            if (load_state_encrypted(filename, key) == TRIT_OK) printf("State loaded from %s\n", filename);
-            continue;
-        }
-        if (strncmp(input, "export ", 7) == 0 || strncmp(input, "json ", 5) == 0) {
-            char filename[MAX_FILENAME];
-            if (sscanf(input + (input[1] == 'x' ? 7 : 5), "%255s", filename) != 1) {
-                printf("Error: Usage: export <file>\n");
-                continue;
+            double median = -1;
+            if (total_trits > 0) {
+                const char* chosen_method = sort_method;
+                if (strcmp(sort_method, "auto") == 0) {
+                    if (total_trits < 10) chosen_method = "quick";
+                    else chosen_method = "merge";
+                }
+                if (strcmp(chosen_method, "quick") == 0) {
+                    quicksort(all_trits, 0, total_trits - 1);
+                } else {
+                    trit_mergesort(all_trits, 0, total_trits - 1);
+                }
+                if (total_trits % 2 == 0) {
+                    median = (all_trits[total_trits / 2 - 1] + all_trits[total_trits / 2]) / 2.0;
+                } else {
+                    median = all_trits[total_trits / 2];
+                }
             }
-            if (export_json(filename) == TRIT_OK) printf("State exported to %s\n", filename);
-            continue;
-        }
-        if (strncmp(input, "NET ", 4) == 0) {
-            char ip[16];
-            int port;
-            if (sscanf(input + 4, "%15s %d", ip, &port) != 2 || port < 1 || port > 65535) {
-                printf("Error: Usage: NET <ip> <port> (e.g., NET 127.0.0.1 8080)\n");
-                continue;
-            }
-            pthread_t net_thread;
-            struct NetArgs { char ip[16]; int port; } args;
-            strncpy(args.ip, ip, 16);
-            args.ip[15] = '\0';
-            args.port = port;
-            if (pthread_create(&net_thread, NULL, (void*(*)(void*))net_listen, &args) != 0) {
-                printf("Error: Failed to start network thread\n");
-                log_error(TRIT_ERR_NETWORK, "run_calculator: NET thread");
-            } else {
-                pthread_detach(net_thread);
-                printf("Network listener started on %s:%d\n", ip, port);
-            }
-            continue;
-        }
-        if (strncmp(input, "LEARN ", 6) == 0) {
-            char topic[MAX_INPUT];
-            if (sscanf(input + 6, "%255s", topic) != 1) {
-                printf("Error: Usage: LEARN <topic> (e.g., LEARN ADD)\n");
-                continue;
-            }
-            learn_topic(topic);
-            continue;
-        }
-        if (strncmp(input, "TEST ", 5) == 0) {
-            int week;
-            if (sscanf(input + 5, "%d", &week) != 1) {
-                printf("Error: Usage: TEST <week> (1-8)\n");
-                continue;
-            }
-            execute_command(input, 0);
-            continue;
-        }
-        if (strncmp(input, "CHECK ", 6) == 0) {
-            execute_command(input, 0);
-            continue;
-        }
-        if (strcmp(input, "SCORE") == 0) {
-            execute_command(input, 0);
-            continue;
-        }
-        if (strncmp(input, "PROG ", 5) == 0) {
-            execute_command(input, 0);
-            continue;
-        }
-        if (strncmp(input, "RUN ", 4) == 0 || strncmp(input, "r ", 2) == 0) {
-            execute_command(input, 0);
+            free(all_trits);
+            printf("Stats - Mean: %.2f | Mode: %d | Median: %.2f\n", mean, mode, median);
             continue;
         }
         execute_command(input, 0);
     }
-    clear_history_and_vars();
-    if (audit_log) fclose(audit_log);
 }
 
-@*2 Main Function.
-@c
 int main() {
-    if (pthread_mutex_init(&mutex, NULL) != 0) {
-        fprintf(stderr, "Error: Failed to initialize mutex\n");
-        return 1;
-    }
     run_calculator();
-    pthread_mutex_destroy(&mutex);
     return 0;
 }
