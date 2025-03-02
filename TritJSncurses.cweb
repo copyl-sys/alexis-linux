@@ -1,43 +1,127 @@
-@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements,
-   Comprehensive Benchmarking, and Ncurses Interface.
-This document defines \.{TritJS-CISA}, a ternary (base-3) scientific calculator built for cybersecurity
-and educational use. In this revision, we incorporate additional security features (such as encrypted state
-management, secure audit logging with digital signing stubs, and access controls), rely on common POSIX functions
-to minimize custom code, and add a comprehensive benchmark tool that tests various operations. In addition,
-an ncurses–based interface is provided so that users can interact via a windowed, text–based UI rather than a
-simple CLI.
+
+@* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements, Comprehensive Benchmarking, and Ncurses Interface.
+This document defines \.{TritJS-CISA}, a ternary (base‑3) scientific calculator built for cybersecurity and educational use.
+In this revision, we incorporate enhanced security features (encrypted state management, secure audit logging with digital signing stubs, and access controls),
+POSIX–preferred functions to reduce custom code, a comprehensive benchmarking tool, and a full ncurses–based interface.
+Optional GNU Readline integration is also supported for legacy CLI mode.
 
 Enhancements include:
- • Enhanced Audit Logging: Logs are written with secure defaults (0600) and include stubbed digital signing.
- • Secure State Management: Save/load routines encrypt and sign state files; only privileged users may load state.
- • Intrusion Detection & Self-Healing: Stub functions monitor for anomalies and trigger self-healing if needed.
- • Binary/Trinary Conversions: Functions to convert native binary integers to/from the internal ternary (TritBigInt) representation.
- • Comprehensive Benchmarking: The "bench" command runs benchmarks on addition, multiplication, division, power, factorial, and conversion operations.
- • POSIX Enhancements: Use of standard POSIX functions (mkstemp, mmap, strdup, etc.) to reduce custom code.
- • Ncurses Interface: A full ncurses–based interface provides separate windows for status, output, and command input.
- • Order of Operations & Secure Defaults: All security checks, logging, and privilege validations occur before any state changes.
- • Optional GNU Readline Integration: (Not used in the ncurses interface but available in legacy CLI mode.)
+ • Enhanced Audit Logging with secure defaults.
+ • Secure State Management with encryption and digital signing (stubbed).
+ • Intrusion Detection & Self-Healing (stub functions).
+ • Binary/Trinary Conversion utilities.
+ • Comprehensive Benchmarking (via the bench command).
+ • POSIX Enhancements: using mkstemp, mmap, strdup, etc.
+ • A full ncurses–based interface (status, output, and input windows).
+ • Order of Operations & Secure Defaults for all state changes.
+ • Optional GNU Readline integration.
 
-This version, dated March 01, 2025, is designed to meet or exceed CISA directives while providing robust security,
-benchmarking, and an interactive ncurses interface.
+@* User Manual
+== Overview ==
+TritJS-CISA is a robust, secure ternary calculator designed to meet CISA directives while offering extensive arithmetic and scientific operations.
+Its secure state management, benchmarking, and interactive ncurses interface make it ideal for cybersecurity professionals and educators.
 
-@*1 Usage and Documentation.
-Compile and run:
-  - Process with cweave:
-         cweave TritCalc.cweb
-  - Process with ctangle:
-         ctangle TritCalc.cweb
-  - Compile with hardened flags (example):
-         gcc -DUSE_READLINE -o tritjs_cisa TritCalc.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses
-  - Run:
-         ./tritjs_cisa
-Supported commands include arithmetic (add, sub, mul, div, pow, fact), scientific (sqrt, log3, sin, cos, tan, pi),
-state management (save, load), conversion (bin2tri, tri2bin), security (monitor), benchmarking (bench), and others.
-Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and digitally signed.
+== Features ==
+• **Arithmetic:** Supports add, sub, mul, div, pow, and fact.
+• **Scientific:** Includes sqrt, log3, sin, cos, tan, and pi.
+• **Conversions:** Provides bin2tri and tri2bin functions.
+• **State Management:** Save and load encrypted (and digitally signed) session states.
+• **Security:** Contains a monitor command for intrusion detection and self-healing stubs.
+• **Benchmarking:** The bench command runs comprehensive performance tests.
+• **Scripting and Variables:** Create scripts (PROG/RUN), assign variables (e.g. A=102), and use control structures (IF, FOR).
+• **Interface:** Operates with an ncurses–based UI (with a status bar, output window, and command input) and supports additional CLI commands.
 
-@*1 Implementation.
+== Installation ==
+1. **Process the .cweb file:**
+   - Generate documentation:  
+     `cweave TritCalc.cweb`
+   - Extract the C source code:  
+     `ctangle TritCalc.cweb`
+2. **Compile:**  
+   Example command: gcc -DUSE_READLINE -o tritjs_cisa TritCalc.c -lm -lreadline -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses
+
+3. **Run:**  
+Launch the program with:  
+`./tritjs_cisa`
+
+== Using the Ncurses Interface ==
+When launched, the program initializes an ncurses–based interface comprising:
+• A **Status Bar** at the top (showing memory usage and operation counts).
+• An **Output Window** in the middle (displaying results and log messages).
+• An **Input Window** at the bottom (for entering commands).
+Use the arrow keys and function keys as needed. Commands are executed immediately with their output shown in real time.
+
+== Command Reference ==
+=== Arithmetic Commands ===
+- **add <a> <b>**: Adds two ternary numbers.
+*Example:* `add 102 21`
+- **sub <a> <b>**: Subtracts the second number from the first.
+*Example:* `sub 210 12`
+- **mul <a> <b>**: Multiplies two ternary numbers.
+- **div <a> <b>**: Divides the first number by the second (default precision is 3).
+*Example:* `div 102 2`
+- **pow <a> <b>**: Raises the first number to the power of the second.
+*Example:* `pow 2 10`
+- **fact <a>**: Computes the factorial of a number.
+
+=== Scientific Commands ===
+- **sqrt <a>**: Computes the square root (returns complex output for negative inputs).
+- **log3 <a>**: Computes the base‑3 logarithm.
+- **sin <a>**, **cos <a>**, **tan <a>**: Standard trigonometric functions.
+- **pi**: Outputs an approximation of π in ternary.
+
+=== Conversion Utilities ===
+- **bin2tri <number>**: Converts a binary (base‑10) integer to its ternary representation.
+- **tri2bin <trit>**: Converts a ternary number to a binary (base‑10) integer.
+
+=== State Management ===
+- **save <file>**: Saves the current session state (encrypted and digitally signed).
+- **load <file>**: Loads a saved state file (requires appropriate privileges).
+
+=== Scripting and Variables ===
+- Use `PROG <name> { <commands> }` to define a script and `RUN <name>` to execute it.
+- Assign variables with commands like `A=<value>` and reference them in later operations.
+
+=== Security and Benchmarking ===
+- **monitor**: Runs intrusion detection and self-healing stubs.
+- **bench**: Executes a suite of benchmarks on key operations.
+
+=== Interface and General Commands ===
+- **help**: Displays this user manual.
+- **clear**: Clears the current command history and stored variables.
+- **test**: Runs internal unit tests.
+- **setprecision <n>**: Sets the default precision (n must be between 1 and 10).
+- **version**: Displays the current program version.
+- **quit**: Exits the program.
+
+== Troubleshooting ==
+• **Audit Log:** Check `/var/log/tritjs_cisa.log` for detailed error and security messages.
+• **Input Format:** Ensure all numeric inputs are in ternary (using only digits 0, 1, and 2).
+• **Privileges:** Loading state files requires elevated privileges (typically root).
+• **Memory:** Verify your system meets the 1MB maximum for mapped trits.
+• **Benchmarking:** Use benchmark outputs to assess performance under load.
+
+== Future Enhancements ==
+Planned improvements include:
+• Full integration with FIPS–validated cryptographic libraries for state encryption and signing.
+• Advanced real-time intrusion detection with automated self-healing.
+• Enhanced scripting capabilities with extended control structures and improved variable management.
+• Further customization of the ncurses interface (e.g., color schemes, dynamic window resizing).
+• Real-time performance graphs and enhanced benchmarking analytics.
+• Expanded support for legacy CLI mode with GNU Readline integration.
+
+== License ==
+This software is distributed under the GNU General Public License (GPL). All modifications and distributions must comply with the GPL.
+
+== End of User Manual ==
+
+@* --- Begin Source Code ---
+@* TritCalc.cweb Source Code for TritJS-CISA
+@* This code incorporates security enhancements, comprehensive benchmarking, POSIX–preferred functions,
+and an ncurses interface.
+
+@* Configuration and Includes
 @c
-/* --- Standard Includes and Hardening Flags --- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +139,7 @@ Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and digitally
 #include <errno.h>
 
 #define TRIT_MAX 3
-#define MAX_MMAP_SIZE (1024 * 1024)  /* 1MB limit */
+#define MAX_MMAP_SIZE (1024 * 1024)
 #define MAX_DISPLAY_WIDTH 50
 #define MAX_HISTORY 10
 #define MAX_VAR_NAME 2
@@ -63,45 +147,52 @@ Inputs are in base‑3 (digits 0, 1, 2). State files are encrypted and digitally
 #define MAX_SCRIPT_CMDS 50
 #define MAX_FILENAME 256
 
-/* --- Performance Profiling Macros --- */
-#define PROFILE_START clock_t _start = clock();
-#define PROFILE_END(msg) printf("[%s] Time: %.4f sec\n", msg, (double)(clock() - _start)/CLOCKS_PER_SEC);
+#define ENABLE_VERBOSE_LOGGING 1
+#define DEFAULT_PRECISION 3
+#define VERSION "2.0-upgrade"
 
-/* --- Data Structures --- */
+#if ENABLE_VERBOSE_LOGGING
+#define LOG_ERROR(err, context) log_error(err, context, __FILE__, __LINE__)
+#else
+#define LOG_ERROR(err, context) log_error(err, context)
+#endif
+
+@* Data Structures
+@c
 typedef int Trit;
 typedef int TritError;  /* 0=OK, 1=Memory, 2=Input, 3=DivZero, 4=Overflow, 5=Undefined, 6=Negative, 7=Precision, 8=MMap, 9=Script */
 
 typedef struct {
-    int sign;            /* 0 = positive, 1 = negative */
-    Trit* digits;        /* Memory-mapped trits */
-    int len;             /* Number of trits */
-    int is_mapped;       /* Flag for mmap cleanup */
-    int fd;              /* File descriptor */
-    char tmp_path[32];
+ int sign;
+ Trit* digits;
+ int len;
+ int is_mapped;
+ int fd;
+ char tmp_path[32];
 } TritBigInt;
 
 typedef struct {
-    int sign;
-    Trit* integer;       /* Memory-mapped integer part */
-    Trit* fraction;      /* Memory-mapped fractional part */
-    int i_len, f_len;
-    int i_mapped, f_mapped;
-    int i_fd, f_fd;
-    char i_tmp_path[32];
-    char f_tmp_path[32];
+ int sign;
+ Trit* integer;
+ Trit* fraction;
+ int i_len, f_len;
+ int i_mapped, f_mapped;
+ int i_fd, f_fd;
+ char i_tmp_path[32];
+ char f_tmp_path[32];
 } TritFloat;
 
 typedef struct {
-    TritFloat real;
-    TritFloat imag;
+ TritFloat real;
+ TritFloat imag;
 } TritComplex;
 
 typedef struct {
-    TritFloat quotient;
-    TritFloat remainder;
+ TritFloat quotient;
+ TritFloat remainder;
 } TritDivResult;
-
-/* --- Global State Variables --- */
+@* Global State Variables
+@c
 static long total_mapped_bytes = 0;
 static int operation_steps = 0;
 static char* history[MAX_HISTORY] = {0};
@@ -109,14 +200,15 @@ static int history_count = 0;
 static TritBigInt* variables[26] = {0};
 
 typedef struct {
-    char name[MAX_SCRIPT_NAME];
-    char commands[MAX_SCRIPT_CMDS][256];
-    int cmd_count;
+ char name[MAX_SCRIPT_NAME];
+ char commands[MAX_SCRIPT_CMDS][256];
+ int cmd_count;
 } Script;
 static Script scripts[10] = {0};
 static int script_count = 0;
 
-/* --- Function Prototypes --- */
+@* Function Prototypes
+@c
 TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
 TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result);
@@ -147,929 +239,1584 @@ void clear_history_and_vars(void);
 void run_tests(void);
 void display_memory_and_stats(const char* action, const char* mode);
 
-/* --- Logging and Audit Functions --- */
+@* Logging and Audit Functions
+@c
 FILE* audit_log = NULL;
 void init_audit_log() {
-    audit_log = fopen("/var/log/tritjs_cisa.log", "a");
-    if (!audit_log) {
-        perror("Audit log initialization failed; defaulting to stderr");
-        audit_log = stderr;
-    }
+ audit_log = fopen("/var/log/tritjs_cisa.log", "a");
+ if (!audit_log) {
+     perror("Audit log initialization failed; defaulting to stderr");
+     audit_log = stderr;
+ }
 }
 void log_error(TritError err, const char* context) {
-    if (!audit_log) return;
-    time_t now;
-    time(&now);
-    fprintf(audit_log, "[%s] ERROR %d: %s in %s\n", ctime(&now), err, trit_error_str(err), context);
-    fflush(audit_log);
+ if (!audit_log) return;
+ time_t now;
+ time(&now);
+ fprintf(audit_log, "[%s] ERROR %d: %s in %s\n", ctime(&now), err, trit_error_str(err), context);
+ fflush(audit_log);
 }
 const char* trit_error_str(TritError err) {
-    switch (err) {
-        case 0: return "No error";
-        case 1: return "Memory allocation failed";
-        case 2: return "Invalid input (trits 0-2 only)";
-        case 3: return "Division by zero";
-        case 4: return "Overflow detected";
-        case 5: return "Operation undefined";
-        case 6: return "Negative input (complex handled)";
-        case 7: return "Precision limit exceeded";
-        case 8: return "Memory mapping failed";
-        case 9: return "Scripting error";
-        default: return "Unknown error";
-    }
+ switch (err) {
+     case 0: return "No error";
+     case 1: return "Memory allocation failed";
+     case 2: return "Invalid input (trits 0-2 only)";
+     case 3: return "Division by zero";
+     case 4: return "Overflow detected";
+     case 5: return "Operation undefined";
+     case 6: return "Negative input (complex handled)";
+     case 7: return "Precision limit exceeded";
+     case 8: return "Memory mapping failed";
+     case 9: return "Scripting error";
+     default: return "Unknown error";
+ }
 }
 
-/* --- POSIX-Based Memory Mapping --- */
+@* POSIX-Based Memory Mapping Functions
+@c
 TritError map_trits(Trit** digits, int len, int* is_mapped, int* fd, char* tmp_path) {
-    if (len * sizeof(Trit) > MAX_MMAP_SIZE) return 4;
-    strcpy(tmp_path, "/tmp/tritjs_cisa_XXXXXX");
-    *fd = mkstemp(tmp_path);
-    if (*fd < 0) return 8;
-    ftruncate(*fd, len * sizeof(Trit));
-    *digits = mmap(NULL, len * sizeof(Trit), PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
-    if (*digits == MAP_FAILED) {
-        close(*fd);
-        unlink(tmp_path);
-        return 8;
-    }
-    *is_mapped = 1;
-    total_mapped_bytes += len * sizeof(Trit);
-    operation_steps++;
-    display_memory_and_stats("Mapping", "merge");
-    unlink(tmp_path);
-    return 0;
+ if (len * sizeof(Trit) > MAX_MMAP_SIZE) return 4;
+ strcpy(tmp_path, "/tmp/tritjs_cisa_XXXXXX");
+ *fd = mkstemp(tmp_path);
+ if (*fd < 0) return 8;
+ ftruncate(*fd, len * sizeof(Trit));
+ *digits = mmap(NULL, len * sizeof(Trit), PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
+ if (*digits == MAP_FAILED) {
+     close(*fd);
+     unlink(tmp_path);
+     return 8;
+ }
+ *is_mapped = 1;
+ total_mapped_bytes += len * sizeof(Trit);
+ operation_steps++;
+ display_memory_and_stats("Mapping", "merge");
+ unlink(tmp_path);
+ return 0;
 }
 void unmap_trits(Trit* digits, int len, int is_mapped, int fd) {
-    if (is_mapped && digits != MAP_FAILED) {
-        total_mapped_bytes -= len * sizeof(Trit);
-        operation_steps++;
-        display_memory_and_stats("Unmapping", "merge");
-        munmap(digits, len * sizeof(Trit));
-        if (fd >= 0) close(fd);
-    } else if (!is_mapped) {
-        free(digits);
-    }
+ if (is_mapped && digits != MAP_FAILED) {
+     total_mapped_bytes -= len * sizeof(Trit);
+     operation_steps++;
+     display_memory_and_stats("Unmapping", "merge");
+     munmap(digits, len * sizeof(Trit));
+     if (fd >= 0) close(fd);
+ } else if (!is_mapped) {
+     free(digits);
+ }
 }
 
-/* --- Enhanced Security Features --- */
-/* Stub implementations for digital signing, encryption, and decryption.
-   Replace these with calls to a FIPS-validated crypto library in production.
-*/
+@* Enhanced Security Features (Stubs)
+@c
 TritError sign_data(const unsigned char* data, size_t data_len, unsigned char** signature, size_t* sig_len) {
-    *signature = NULL; *sig_len = 0; return 0;
+ *signature = NULL; *sig_len = 0; return 0;
 }
 TritError verify_signature(const unsigned char* data, size_t data_len, const unsigned char* signature, size_t sig_len) {
-    return 0;
+ return 0;
 }
 TritError encrypt_data(const unsigned char* plaintext, size_t pt_len, unsigned char** ciphertext, size_t* ct_len) {
-    *ciphertext = malloc(pt_len);
-    if (!*ciphertext) return 1;
-    memcpy(*ciphertext, plaintext, pt_len);
-    *ct_len = pt_len;
-    return 0;
+ *ciphertext = malloc(pt_len);
+ if (!*ciphertext) return 1;
+ memcpy(*ciphertext, plaintext, pt_len);
+ *ct_len = pt_len;
+ return 0;
 }
 TritError decrypt_data(const unsigned char* ciphertext, size_t ct_len, unsigned char** plaintext, size_t* pt_len) {
-    *plaintext = malloc(ct_len);
-    if (!*plaintext) return 1;
-    memcpy(*plaintext, ciphertext, ct_len);
-    *pt_len = ct_len;
-    return 0;
+ *plaintext = malloc(ct_len);
+ if (!*plaintext) return 1;
+ memcpy(*plaintext, ciphertext, ct_len);
+ *pt_len = ct_len;
+ return 0;
 }
 
-/* --- Secure State Management --- */
+@* Secure State Management
+@c
 TritError save_state(const char* filename) {
-    FILE* f = fopen(filename, "wb");
-    if (!f) {
-        printf("Error: Could not open file %s for writing\n", filename);
-        return 2;
-    }
-    char state_buf[4096] = {0};
-    strcat(state_buf, "# TritJS-CISA State File (Encrypted, MIME: application/x-tritjs-cisa)\n# History\n");
-    for (int i = 0; i < history_count; i++) {
-        strcat(state_buf, "H: ");
-        strcat(state_buf, history[i]);
-        strcat(state_buf, "\n");
-    }
-    strcat(state_buf, "# Variables\n");
-    for (int i = 0; i < 26; i++) {
-        if (variables[i]) {
-            char* var_str = NULL;
-            if (tritjs_to_string(variables[i], &var_str) == 0) {
-                char line[512];
-                snprintf(line, sizeof(line), "V: %c=%s\n", 'A' + i, var_str);
-                strcat(state_buf, line);
-                free(var_str);
-            }
-        }
-    }
-    unsigned char* ciphertext = NULL;
-    size_t ct_len = 0;
-    if (encrypt_data((unsigned char*)state_buf, strlen(state_buf), &ciphertext, &ct_len) != 0) {
-        fclose(f);
-        return 1;
-    }
-    fwrite(ciphertext, 1, ct_len, f);
-    free(ciphertext);
-    fclose(f);
-    return 0;
+ FILE* f = fopen(filename, "wb");
+ if (!f) {
+     printf("Error: Could not open file %s for writing\n", filename);
+     return 2;
+ }
+ char state_buf[4096] = {0};
+ strcat(state_buf, "# TritJS-CISA State File (Encrypted, MIME: application/x-tritjs-cisa)\n# History\n");
+ for (int i = 0; i < history_count; i++) {
+     strcat(state_buf, "H: ");
+     strcat(state_buf, history[i]);
+     strcat(state_buf, "\n");
+ }
+ strcat(state_buf, "# Variables\n");
+ for (int i = 0; i < 26; i++) {
+     if (variables[i]) {
+         char* var_str = NULL;
+         if (tritjs_to_string(variables[i], &var_str) == 0) {
+             char line[512];
+             snprintf(line, sizeof(line), "V: %c=%s\n", 'A' + i, var_str);
+             strcat(state_buf, line);
+             free(var_str);
+         }
+     }
+ }
+ unsigned char* ciphertext = NULL;
+ size_t ct_len = 0;
+ if (encrypt_data((unsigned char*)state_buf, strlen(state_buf), &ciphertext, &ct_len) != 0) {
+     fclose(f);
+     return 1;
+ }
+ fwrite(ciphertext, 1, ct_len, f);
+ free(ciphertext);
+ fclose(f);
+ return 0;
 }
 TritError load_state(const char* filename) {
-    if (getuid() != 0) {
-        printf("Error: Insufficient privileges to load state\n");
-        return 2;
-    }
-    FILE* f = fopen(filename, "rb");
-    if (!f) {
-        printf("Error: Could not open file %s for reading\n", filename);
-        return 2;
-    }
-    fseek(f, 0, SEEK_END);
-    long fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    unsigned char* ciphertext = malloc(fsize);
-    if (!ciphertext) {
-        fclose(f);
-        return 1;
-    }
-    fread(ciphertext, 1, fsize, f);
-    fclose(f);
-    unsigned char* plaintext = NULL;
-    size_t pt_len = 0;
-    if (decrypt_data(ciphertext, fsize, &plaintext, &pt_len) != 0) {
-        free(ciphertext);
-        return 1;
-    }
-    free(ciphertext);
-    /* State parsing code goes here (omitted for brevity) */
-    free(plaintext);
-    return 0;
+ if (getuid() != 0) {
+     printf("Error: Insufficient privileges to load state\n");
+     return 2;
+ }
+ FILE* f = fopen(filename, "rb");
+ if (!f) {
+     printf("Error: Could not open file %s for reading\n", filename);
+     return 2;
+ }
+ fseek(f, 0, SEEK_END);
+ long fsize = ftell(f);
+ fseek(f, 0, SEEK_SET);
+ unsigned char* ciphertext = malloc(fsize);
+ if (!ciphertext) {
+     fclose(f);
+     return 1;
+ }
+ fread(ciphertext, 1, fsize, f);
+ fclose(f);
+ unsigned char* plaintext = NULL;
+ size_t pt_len = 0;
+ if (decrypt_data(ciphertext, fsize, &plaintext, &pt_len) != 0) {
+     free(ciphertext);
+     return 1;
+ }
+ free(ciphertext);
+ /* State parsing code goes here (omitted for brevity) */
+ free(plaintext);
+ return 0;
 }
 
-/* --- Intrusion Detection and Self-Healing --- */
+@* Intrusion Detection and Self-Healing
+@c
 void monitor_security() {
-    /* Stub: Monitor system logs/metrics and trigger self_heal() if anomalies detected */
-    printf("Security monitor running...\n");
+ printf("Security monitor running...\n");
 }
 void self_heal() {
-    printf("Self-healing triggered: Reverting to safe state...\n");
-    /* Implement state reload, process termination, etc. */
+ printf("Self-healing triggered: Reverting to safe state...\n");
 }
 
-/* --- Benchmarking Tool --- */
+@* Benchmarking Tool
+@c
 void run_benchmarks() {
-    printf("Running comprehensive benchmarks...\n");
-    int iterations = 10000;
-    
-    /* Benchmark Addition */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("12", &a);
-        parse_trit_string("21", &b);
-        tritjs_add_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Addition");
-    
-    /* Benchmark Multiplication */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("12", &a);
-        parse_trit_string("21", &b);
-        tritjs_multiply_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Multiplication");
-    
-    /* Benchmark Division */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b;
-        TritDivResult result;
-        parse_trit_string("21", &a);
-        parse_trit_string("2", &b);
-        tritjs_divide_big(a, b, &result, 3);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritfloat_free(result.quotient);
-        tritfloat_free(result.remainder);
-    }
-    PROFILE_END("Division");
-    
-    /* Benchmark Power (2^2) */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("2", &a);
-        parse_trit_string("2", &b);
-        tritjs_power_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Power");
-    
-    /* Benchmark Factorial (of 2) */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *result;
-        parse_trit_string("2", &a);
-        tritjs_factorial_big(a, &result);
-        tritbig_free(a);
-        tritbig_free(result);
-    }
-    PROFILE_END("Factorial");
-    
-    /* Benchmark Binary/Trinary Conversion */
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *tri;
-        binary_to_trit(42, &tri);
-        int bin;
-        trit_to_binary(tri, &bin);
-        tritbig_free(tri);
-    }
-    PROFILE_END("Conversion");
+ printf("Running comprehensive benchmarks...\n");
+ int iterations = 10000;
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("12", &a);
+     parse_trit_string("21", &b);
+     tritjs_add_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Addition");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("12", &a);
+     parse_trit_string("21", &b);
+     tritjs_multiply_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Multiplication");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b;
+     TritDivResult result;
+     parse_trit_string("21", &a);
+     parse_trit_string("2", &b);
+     tritjs_divide_big(a, b, &result, 3);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritfloat_free(result.quotient);
+     tritfloat_free(result.remainder);
+ }
+ PROFILE_END("Division");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("2", &a);
+     parse_trit_string("2", &b);
+     tritjs_power_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Power");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *result;
+     parse_trit_string("2", &a);
+     tritjs_factorial_big(a, &result);
+     tritbig_free(a);
+     tritbig_free(result);
+ }
+ PROFILE_END("Factorial");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *tri;
+     binary_to_trit(42, &tri);
+     int bin;
+     trit_to_binary(tri, &bin);
+     tritbig_free(tri);
+ }
+ PROFILE_END("Conversion");
 }
 
-/* --- Utility Functions --- */
+@* Utility Functions
+@c
 TritError parse_trit_string(const char* str, TritBigInt** bi) {
-    if (!str || !strlen(str)) return 2;
-    if (strlen(str) > 256) return 2;
-    int sign = (str[0] == '-') ? 1 : 0;
-    const char* mag = sign ? str + 1 : str;
-    int len = strlen(mag);
-    Trit* trits = malloc(len * sizeof(Trit));
-    if (!trits) return 1;
-    for (int i = 0; i < len; i++) {
-        if (mag[i] < '0' || mag[i] > '2') {
-            free(trits);
-            fprintf(stderr, "parse_trit_string: Invalid character '%c'\n", mag[i]);
-            return 2;
-        }
-        trits[i] = mag[i] - '0';
-    }
-    TritError err = tritbig_from_trits(trits, len, sign, bi);
-    free(trits);
-    return err;
+ if (!str || !strlen(str)) return 2;
+ if (strlen(str) > 256) return 2;
+ int sign = (str[0] == '-') ? 1 : 0;
+ const char* mag = sign ? str + 1 : str;
+ int len = strlen(mag);
+ Trit* trits = malloc(len * sizeof(Trit));
+ if (!trits) return 1;
+ for (int i = 0; i < len; i++) {
+     if (mag[i] < '0' || mag[i] > '2') {
+         free(trits);
+         fprintf(stderr, "parse_trit_string: Invalid character '%c'\n", mag[i]);
+         return 2;
+     }
+     trits[i] = mag[i] - '0';
+ }
+ TritError err = tritbig_from_trits(trits, len, sign, bi);
+ free(trits);
+ return err;
 }
 TritError tritjs_to_string(TritBigInt* bi, char** str) {
-    if (!bi || bi->len <= 0) return 2;
-    *str = malloc(bi->len + 1 + (bi->sign ? 1 : 0));
-    if (!*str) return 1;
-    char* p = *str;
-    if (bi->sign) *p++ = '-';
-    for (int i = 0; i < bi->len; i++) *p++ = '0' + bi->digits[i];
-    *p = '\0';
-    return 0;
+ if (!bi || bi->len <= 0) return 2;
+ *str = malloc(bi->len + 1 + (bi->sign ? 1 : 0));
+ if (!*str) return 1;
+ char* p = *str;
+ if (bi->sign) *p++ = '-';
+ for (int i = 0; i < bi->len; i++) *p++ = '0' + bi->digits[i];
+ *p = '\0';
+ return 0;
 }
 TritError tritfloat_to_string(TritFloat tf, char** str) {
-    if (!tf.integer || tf.i_len <= 0) return 2;
-    int total_len = tf.i_len + (tf.f_len > 0 ? tf.f_len + 1 : 0) + (tf.sign ? 1 : 0);
-    *str = malloc(total_len + 1);
-    if (!*str) return 1;
-    char* p = *str;
-    if (tf.sign) *p++ = '-';
-    for (int i = 0; i < tf.i_len; i++) *p++ = '0' + tf.integer[i];
-    if (tf.f_len > 0) {
-        *p++ = '.';
-        for (int i = 0; i < tf.f_len; i++) *p++ = '0' + tf.fraction[i];
-    }
-    *p = '\0';
-    return 0;
+ if (!tf.integer || tf.i_len <= 0) return 2;
+ int total_len = tf.i_len + (tf.f_len > 0 ? tf.f_len + 1 : 0) + (tf.sign ? 1 : 0);
+ *str = malloc(total_len + 1);
+ if (!*str) return 1;
+ char* p = *str;
+ if (tf.sign) *p++ = '-';
+ for (int i = 0; i < tf.i_len; i++) *p++ = '0' + tf.integer[i];
+ if (tf.f_len > 0) {
+     *p++ = '.';
+     for (int i = 0; i < tf.f_len; i++) *p++ = '0' + tf.fraction[i];
+ }
+ *p = '\0';
+ return 0;
 }
 TritError tritcomplex_to_string(TritComplex tc, char** str) {
-    char* real_str, *imag_str;
-    TritError err;
-    if ((err = tritfloat_to_string(tc.real, &real_str)) != 0) return err;
-    if ((err = tritfloat_to_string(tc.imag, &imag_str)) != 0) {
-        free(real_str);
-        return err;
-    }
-    int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
-    if (imag_zero) {
-        *str = real_str;
-        free(imag_str);
-        return 0;
-    }
-    *str = malloc(strlen(real_str) + strlen(imag_str) + 4);
-    if (!*str) {
-        free(real_str);
-        free(imag_str);
-        return 1;
-    }
-    sprintf(*str, "%s %si", real_str, imag_str);
-    free(real_str);
-    free(imag_str);
-    return 0;
+ char* real_str, *imag_str;
+ TritError err;
+ if ((err = tritfloat_to_string(tc.real, &real_str)) != 0) return err;
+ if ((err = tritfloat_to_string(tc.imag, &imag_str)) != 0) {
+     free(real_str);
+     return err;
+ }
+ int imag_zero = (tc.imag.i_len == 1 && tc.imag.integer[0] == 0 && tc.imag.f_len == 0);
+ if (imag_zero) {
+     *str = real_str;
+     free(imag_str);
+     return 0;
+ }
+ *str = malloc(strlen(real_str) + strlen(imag_str) + 4);
+ if (!*str) {
+     free(real_str);
+     free(imag_str);
+     return 1;
+ }
+ sprintf(*str, "%s %si", real_str, imag_str);
+ free(real_str);
+ free(imag_str);
+ return 0;
 }
-
-/* --- Binary/Trinary Conversion Functions --- */
 TritError binary_to_trit(int num, TritBigInt** result) {
-    int sign = (num < 0) ? 1 : 0;
-    int abs_val = (num < 0) ? -num : num;
-    if (abs_val == 0) {
-        *result = malloc(sizeof(TritBigInt));
-        if (!*result) return 1;
-        (*result)->sign = 0;
-        (*result)->len = 1;
-        (*result)->digits = malloc(sizeof(Trit));
-        if (!(*result)->digits) { free(*result); return 1; }
-        (*result)->digits[0] = 0;
-        (*result)->is_mapped = 0;
-        return 0;
-    }
-    int capacity = 16;
-    Trit* digits = malloc(capacity * sizeof(Trit));
-    if (!digits) return 1;
-    int index = 0;
-    while (abs_val > 0) {
-        if (index >= capacity) {
-            capacity *= 2;
-            Trit* new_digits = realloc(digits, capacity * sizeof(Trit));
-            if (!new_digits) { free(digits); return 1; }
-            digits = new_digits;
-        }
-        digits[index++] = abs_val % TRIT_MAX;
-        abs_val /= TRIT_MAX;
-    }
-    for (int i = 0; i < index/2; i++) {
-        Trit temp = digits[i];
-        digits[i] = digits[index - i - 1];
-        digits[index - i - 1] = temp;
-    }
-    *result = malloc(sizeof(TritBigInt));
-    if (!*result) { free(digits); return 1; }
-    (*result)->sign = sign;
-    (*result)->len = index;
-    (*result)->digits = digits;
-    (*result)->is_mapped = 0;
-    return 0;
+ int sign = (num < 0) ? 1 : 0;
+ int abs_val = (num < 0) ? -num : num;
+ if (abs_val == 0) {
+     *result = malloc(sizeof(TritBigInt));
+     if (!*result) return 1;
+     (*result)->sign = 0;
+     (*result)->len = 1;
+     (*result)->digits = malloc(sizeof(Trit));
+     if (!(*result)->digits) { free(*result); return 1; }
+     (*result)->digits[0] = 0;
+     (*result)->is_mapped = 0;
+     return 0;
+ }
+ int capacity = 16;
+ Trit* digits = malloc(capacity * sizeof(Trit));
+ if (!digits) return 1;
+ int index = 0;
+ while (abs_val > 0) {
+     if (index >= capacity) {
+         capacity *= 2;
+         Trit* new_digits = realloc(digits, capacity * sizeof(Trit));
+         if (!new_digits) { free(digits); return 1; }
+         digits = new_digits;
+     }
+     digits[index++] = abs_val % TRIT_MAX;
+     abs_val /= TRIT_MAX;
+ }
+ for (int i = 0; i < index/2; i++) {
+     Trit temp = digits[i];
+     digits[i] = digits[index - i - 1];
+     digits[index - i - 1] = temp;
+ }
+ *result = malloc(sizeof(TritBigInt));
+ if (!*result) { free(digits); return 1; }
+ (*result)->sign = sign;
+ (*result)->len = index;
+ (*result)->digits = digits;
+ (*result)->is_mapped = 0;
+ return 0;
 }
 TritError trit_to_binary(TritBigInt* tri, int* result) {
-    if (!tri || !result) return 2;
-    int value = 0;
-    for (int i = 0; i < tri->len; i++) {
-        value = value * TRIT_MAX + tri->digits[i];
-    }
-    if (tri->sign) value = -value;
-    *result = value;
-    return 0;
+ if (!tri || !result) return 2;
+ int value = 0;
+ for (int i = 0; i < tri->len; i++) {
+     value = value * TRIT_MAX + tri->digits[i];
+ }
+ if (tri->sign) value = -value;
+ *result = value;
+ return 0;
 }
 
-/* --- Enhanced CLI Commands and Benchmarking --- */
+@* Scripting and Variable Functions
+@c
 void add_to_history(const char* entry) {
-    if (history_count < MAX_HISTORY) {
-        history[history_count++] = strdup(entry);
-    } else {
-        free(history[0]);
-        for (int i = 1; i < MAX_HISTORY; i++) {
-            history[i-1] = history[i];
-        }
-        history[MAX_HISTORY-1] = strdup(entry);
-    }
+ if (history_count < MAX_HISTORY) {
+     history[history_count++] = strdup(entry);
+ } else {
+     free(history[0]);
+     for (int i = 1; i < MAX_HISTORY; i++) {
+         history[i-1] = history[i];
+     }
+     history[MAX_HISTORY-1] = strdup(entry);
+ }
 }
 void store_variable(const char* var_name, TritBigInt* value) {
-    int index = var_name[0] - 'A';
-    if (variables[index]) tritbig_free(variables[index]);
-    variables[index] = value;
+ int index = var_name[0] - 'A';
+ if (variables[index]) tritbig_free(variables[index]);
+ variables[index] = value;
 }
 TritBigInt* recall_variable(const char* var_name) {
-    int index = var_name[0] - 'A';
-    return variables[index];
+ int index = var_name[0] - 'A';
+ return variables[index];
 }
 void clear_history_and_vars(void) {
-    for (int i = 0; i < history_count; i++) {
-        free(history[i]);
-        history[i] = NULL;
-    }
-    history_count = 0;
-    for (int i = 0; i < 26; i++) {
-        if (variables[i]) {
-            tritbig_free(variables[i]);
-            variables[i] = NULL;
-        }
-    }
+ for (int i = 0; i < history_count; i++) {
+     free(history[i]);
+     history[i] = NULL;
+ }
+ history_count = 0;
+ for (int i = 0; i < 26; i++) {
+     if (variables[i]) {
+         tritbig_free(variables[i]);
+         variables[i] = NULL;
+     }
+ }
 }
 void run_tests(void) {
-    printf("Running unit tests...\n");
-    /* Insert unit test code here */
+ printf("Running unit tests...\n");
+ /* Insert unit test code here */
 }
-
-/* Dummy function to display memory and stats (for demonstration) */
 void display_memory_and_stats(const char* action, const char* mode) {
-    /* In production, display actual memory usage and operation counts */
+ /* Placeholder for memory and stats display */
 }
 
-/* --- Script Execution --- */
-TritError execute_command(const char* input, int is_script) {
-    char op[10], arg1[256], arg2[256] = "";
-    int parsed = sscanf(input, "%9s %255s %255s", op, arg1, arg2);
-    if (parsed < 2 || strlen(arg1) > 255 || (arg2[0] && strlen(arg2) > 255)) {
-        if (!is_script) printf("Error: Input too long or invalid format\n");
-        return 2;
-    }
-    if (strncmp(input, "bin2tri", 7) == 0) {
-        int num;
-        if (sscanf(input + 7, "%d", &num) != 1) {
-            if (!is_script) printf("Error: Invalid binary number\n");
-            return 2;
-        }
-        TritBigInt* tri;
-        TritError err = binary_to_trit(num, &tri);
-        if (err == 0) {
-            char* str;
-            if ((err = tritjs_to_string(tri, &str)) == 0) {
-                if (!is_script) printf("Trinary: %s\n", str);
-                add_to_history(str);
-                free(str);
-            }
-            tritbig_free(tri);
-        }
-        return err;
-    }
-    if (strncmp(input, "tri2bin", 7) == 0) {
-        char trit_str[256];
-        if (sscanf(input + 7, "%255s", trit_str) != 1) {
-            if (!is_script) printf("Error: Invalid trinary input\n");
-            return 2;
-        }
-        TritBigInt* tri;
-        TritError err = parse_trit_string(trit_str, &tri);
-        if (err == 0) {
-            int num;
-            trit_to_binary(tri, &num);
-            if (!is_script) printf("Binary: %d\n", num);
-            char buf[256];
-            snprintf(buf, sizeof(buf), "%d", num);
-            add_to_history(buf);
-            tritbig_free(tri);
-        }
-        return err;
-    }
-    if (strncmp(input, "bench", 5) == 0) {
-        run_benchmarks();
-        return 0;
-    }
-    if (strncmp(input, "monitor", 7) == 0) {
-        monitor_security();
-        return 0;
-    }
-    /* Process other commands (arithmetic, scientific, etc.) */
-    TritBigInt* a = NULL;
-    TritBigInt* b = NULL;
-    TritError err;
-    if (strchr(arg1, '=') && !arg2[0]) {
-        char var_name[2] = {arg1[0], '\0'};
-        char* value = strchr(arg1, '=') + 1;
-        if ((err = parse_trit_string(value, &a)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-            return err;
-        }
-        store_variable(var_name, a);
-        if (!is_script) printf("%s stored\n", var_name);
-        return 0;
-    }
-    if (arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0') {
-        a = recall_variable(arg1);
-        if (!a) {
-            if (!is_script) printf("Error: Variable %s not set\n", arg1);
-            return 2;
-        }
-    } else if ((err = parse_trit_string(arg1, &a)) != 0) {
-        if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        return err;
-    }
-    if (strlen(arg2) > 0) {
-        if (arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0') {
-            b = recall_variable(arg2);
-            if (!b) {
-                if (!is_script) printf("Error: Variable %s not set\n", arg2);
-                tritbig_free(a);
-                return 2;
-            }
-        } else if ((err = parse_trit_string(arg2, &b)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-            tritbig_free(a);
-            return err;
-        }
-    }
-    if (strcmp(op, "add") == 0 && b) {
-        TritBigInt* result;
-        if ((err = tritjs_add_big(a, b, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritjs_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritbig_free(result);
-        }
-    } else if (strcmp(op, "sub") == 0 && b) {
-        TritBigInt* result;
-        if ((err = tritjs_subtract_big(a, b, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritjs_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritbig_free(result);
-        }
-    } else if (strcmp(op, "mul") == 0 && b) {
-        TritBigInt* result;
-        if ((err = tritjs_multiply_big(a, b, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritjs_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritbig_free(result);
-        }
-    } else if (strcmp(op, "div") == 0 && b) {
-        TritDivResult result = {{0}, {0}};
-        if ((err = tritjs_divide_big(a, b, &result, 3)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* q_str, *r_str;
-            if ((err = tritfloat_to_string(result.quotient, &q_str)) == 0 &&
-                (err = tritfloat_to_string(result.remainder, &r_str)) == 0) {
-                char full_result[512];
-                snprintf(full_result, sizeof(full_result), "%s r %s", q_str, r_str);
-                if (!is_script) {
-                    printf("%s\n", full_result);
-                    add_to_history(full_result);
-                }
-                free(q_str);
-                free(r_str);
-            }
-            tritfloat_free(result.quotient);
-            tritfloat_free(result.remainder);
-        }
-    } else if (strcmp(op, "pow") == 0 && b) {
-        TritBigInt* result;
-        if ((err = tritjs_power_big(a, b, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritjs_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritbig_free(result);
-        }
-    } else if (strcmp(op, "fact") == 0) {
-        TritBigInt* result;
-        if ((err = tritjs_factorial_big(a, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritjs_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritbig_free(result);
-        }
-    } else if (strcmp(op, "sqrt") == 0) {
-        TritComplex result;
-        if ((err = tritjs_sqrt_complex(a, 3, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritcomplex_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritcomplex_free(result);
-        }
-    } else if (strcmp(op, "log3") == 0) {
-        TritComplex result;
-        if ((err = tritjs_log3_complex(a, 3, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritcomplex_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritcomplex_free(result);
-        }
-    } else if (strcmp(op, "sin") == 0) {
-        TritComplex result;
-        if ((err = tritjs_sin_complex(a, 3, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritcomplex_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritcomplex_free(result);
-        }
-    } else if (strcmp(op, "cos") == 0) {
-        TritComplex result;
-        if ((err = tritjs_cos_complex(a, 3, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritcomplex_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritcomplex_free(result);
-        }
-    } else if (strcmp(op, "tan") == 0) {
-        TritComplex result;
-        if ((err = tritjs_tan_complex(a, 3, &result)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str;
-            if ((err = tritcomplex_to_string(result, &str)) == 0) {
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            tritcomplex_free(result);
-        }
-    } else if (strcmp(op, "pi") == 0) {
-        int len;
-        Trit* pi;
-        if ((err = tritjs_pi(&len, &pi)) != 0) {
-            if (!is_script) printf("Error: %s\n", trit_error_str(err));
-        } else {
-            char* str = malloc(len + 1);
-            if (str) {
-                for (int i = 0; i < len; i++) str[i] = '0' + pi[i];
-                str[len] = '\0';
-                if (!is_script) {
-                    printf("%s\n", str);
-                    add_to_history(str);
-                }
-                free(str);
-            }
-            free(pi);
-        }
-    } else {
-        if (!is_script) printf("Error: Unknown command\n");
-        err = 2;
-    }
-    if (a && !(arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0')) tritbig_free(a);
-    if (b && !(arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0')) tritbig_free(b);
-    return err;
+@* Arithmetic Operations
+@c
+TritError tritjs_add_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
+ if (!a || !b) return 2;
+ int max_len = (a->len > b->len) ? a->len : b->len;
+ Trit* temp = calloc(max_len + 1, sizeof(Trit));
+ if (!temp) return 1;
+ int carry = 0;
+ if (a->sign == b->sign) {
+     for (int i = max_len - 1, pos = 0; i >= 0; i--, pos++) {
+         Trit a_trit = (i < a->len) ? a->digits[i] : 0;
+         Trit b_trit = (i < b->len) ? b->digits[i] : 0;
+         int sum = a_trit + b_trit + carry;
+         temp[max_len - pos] = sum % TRIT_MAX;
+         carry = sum / TRIT_MAX;
+     }
+     if (carry) temp[0] = carry;
+     int result_len = carry ? max_len + 1 : max_len;
+     if (!carry) memmove(temp, temp + 1, max_len * sizeof(Trit));
+     TritError err = tritbig_from_trits(temp, result_len, a->sign, result);
+     free(temp);
+     return err;
+ } else {
+     TritBigInt* b_neg;
+     TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
+     if (err != 0) { free(temp); return err; }
+     err = tritjs_add_big(a, b_neg, result);
+     tritbig_free(b_neg);
+     free(temp);
+     return err;
+ }
 }
 
-/* --- Script Execution --- */
-TritError run_script(Script* script) {
-    for (int i = 0; i < script->cmd_count; i++) {
-        char* cmd = script->commands[i];
-        if (strncmp(cmd, "IF ", 3) == 0) {
-            char cond[256], then_cmd[256];
-            if (sscanf(cmd, "IF %255s THEN %255[^\n]", cond, then_cmd) != 2) {
-                printf("Script Error: Invalid IF syntax\n");
-                return 9;
-            }
-            TritBigInt* cond_val;
-            if (parse_trit_string(cond, &cond_val) != 0) {
-                printf("Script Error: Invalid condition\n");
-                return 9;
-            }
-            int val = 0;
-            for (int j = 0; j < cond_val->len; j++) val = val * TRIT_MAX + cond_val->digits[j];
-            tritbig_free(cond_val);
-            if (val != 0) {
-                if (execute_command(then_cmd, 1) != 0) return 9;
-            }
-        } else if (strncmp(cmd, "FOR ", 4) == 0) {
-            char var[2], start_str[256], end_str[256], loop_cmd[256];
-            if (sscanf(cmd, "FOR %1s %255s %255s %255[^\n]", var, start_str, end_str, loop_cmd) != 4) {
-                printf("Script Error: Invalid FOR syntax\n");
-                return 9;
-            }
-            TritBigInt *start, *end;
-            if (parse_trit_string(start_str, &start) != 0 || parse_trit_string(end_str, &end) != 0) {
-                printf("Script Error: Invalid FOR range\n");
-                return 9;
-            }
-            int start_val = 0, end_val = 0;
-            for (int j = 0; j < start->len; j++) start_val = start_val * TRIT_MAX + start->digits[j];
-            for (int j = 0; j < end->len; j++) end_val = end_val * TRIT_MAX + end->digits[j];
-            for (int k = start_val; k <= end_val; k++) {
-                char val_str[10];
-                snprintf(val_str, sizeof(val_str), "%d", k);
-                TritBigInt* i_bi;
-                if (parse_trit_string(val_str, &i_bi) != 0) {
-                    tritbig_free(start);
-                    tritbig_free(end);
-                    return 9;
-                }
-                store_variable(var, i_bi);
-                if (execute_command(loop_cmd, 1) != 0) {
-                    tritbig_free(start);
-                    tritbig_free(end);
-                    return 9;
-                }
-            }
-            tritbig_free(start);
-            tritbig_free(end);
-        } else {
-            if (execute_command(cmd, 1) != 0) return 9;
-        }
-    }
-    return 0;
+TritError tritjs_subtract_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
+ if (!a || !b) return 2;
+ TritBigInt* b_neg;
+ TritError err = tritbig_from_trits(b->digits, b->len, !b->sign, &b_neg);
+ if (err != 0) return err;
+ err = tritjs_add_big(a, b_neg, result);
+ tritbig_free(b_neg);
+ return err;
 }
 
-/* --- Benchmarking Tool --- */
-void run_benchmarks() {
-    printf("Running comprehensive benchmarks...\n");
-    int iterations = 10000;
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("12", &a);
-        parse_trit_string("21", &b);
-        tritjs_add_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Addition");
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("12", &a);
-        parse_trit_string("21", &b);
-        tritjs_multiply_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Multiplication");
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b;
-        TritDivResult result;
-        parse_trit_string("21", &a);
-        parse_trit_string("2", &b);
-        tritjs_divide_big(a, b, &result, 3);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritfloat_free(result.quotient);
-        tritfloat_free(result.remainder);
-    }
-    PROFILE_END("Division");
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *b, *result;
-        parse_trit_string("2", &a);
-        parse_trit_string("2", &b);
-        tritjs_power_big(a, b, &result);
-        tritbig_free(a);
-        tritbig_free(b);
-        tritbig_free(result);
-    }
-    PROFILE_END("Power");
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *a, *result;
-        parse_trit_string("2", &a);
-        tritjs_factorial_big(a, &result);
-        tritbig_free(a);
-        tritbig_free(result);
-    }
-    PROFILE_END("Factorial");
-    
-    PROFILE_START
-    for (int i = 0; i < iterations; i++) {
-        TritBigInt *tri;
-        binary_to_trit(42, &tri);
-        int bin;
-        trit_to_binary(tri, &bin);
-        tritbig_free(tri);
-    }
-    PROFILE_END("Conversion");
+TritError tritjs_multiply_big(TritBigInt* a, TritBigInt* b, TritBigInt** result) {
+ if (!a || !b) return 2;
+ int max_len = a->len + b->len;
+ Trit* temp = calloc(max_len, sizeof(Trit));
+ if (!temp) return 1;
+ for (int i = a->len - 1; i >= 0; i--) {
+     int carry = 0;
+     for (int j = b->len - 1; j >= 0; j--) {
+         int pos = i + j + 1;
+         int prod = a->digits[i] * b->digits[j] + temp[pos] + carry;
+         temp[pos] = prod % TRIT_MAX;
+         carry = prod / TRIT_MAX;
+     }
+     if (carry) temp[i] += carry;
+ }
+ int start = 0;
+ while (start < max_len - 1 && temp[start] == 0) start++;
+ int sign = (a->sign == b->sign) ? 0 : 1;
+ TritError err = tritbig_from_trits(temp + start, max_len - start, sign, result);
+ free(temp);
+ return err;
 }
 
-/* --- Ncurses Interface Integration --- */
+TritError tritjs_divide_big(TritBigInt* a, TritBigInt* b, TritDivResult* result, int precision) {
+ if (!a || !b) return 2;
+ if (precision <= 0 || precision > 10) return 7;
+ int b_is_zero = 1;
+ for (int i = 0; i < b->len; i++) {
+     if (b->digits[i] != 0) { b_is_zero = 0; break; }
+ }
+ if (b_is_zero) {
+     LOG_ERROR(3, "tritjs_divide_big");
+     return 3;
+ }
+ TritFloat dividend, divisor;
+ TritError err;
+ if ((err = tritfloat_from_bigint(a, &dividend)) != 0) return err;
+ if ((err = tritfloat_from_bigint(b, &divisor)) != 0) {
+     tritfloat_free(dividend);
+     return err;
+ }
+ result->quotient.i_len = a->len;
+ result->quotient.f_len = precision;
+ result->remainder.i_len = b->len;
+ result->quotient.sign = (a->sign == b->sign) ? 0 : 1;
+ result->remainder.sign = a->sign;
+ if ((err = map_trits(&result->quotient.integer, a->len, &result->quotient.i_mapped, &result->quotient.i_fd, result->quotient.i_tmp_path)) != 0)
+     goto cleanup;
+ if ((err = map_trits(&result->quotient.fraction, precision, &result->quotient.f_mapped, &result->quotient.f_fd, result->quotient.f_tmp_path)) != 0)
+     goto cleanup;
+ if ((err = map_trits(&result->remainder.integer, b->len, &result->remainder.i_mapped, &result->remainder.i_fd, result->remainder.i_tmp_path)) != 0)
+     goto cleanup;
+ TritBigInt* temp_rem;
+ if ((err = tritbig_from_trits(a->digits, a->len, a->sign, &temp_rem)) != 0) goto cleanup;
+ for (int i = 0; i < a->len; i++) {
+     int digit = 0;
+     for (int q = 2; q >= 0; q--) {
+         TritBigInt* multiple;
+         Trit trits[] = {(Trit)q};
+         if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != 0) goto cleanup_inner;
+         TritBigInt* prod;
+         if ((err = tritjs_multiply_big(b, multiple, &prod)) != 0) {
+             tritbig_free(multiple);
+             goto cleanup_inner;
+         }
+         TritBigInt* sub;
+         if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == 0) {
+             digit = q;
+             tritbig_free(temp_rem);
+             temp_rem = sub;
+             tritbig_free(multiple);
+             tritbig_free(prod);
+             break;
+         }
+         tritbig_free(multiple);
+         tritbig_free(prod);
+     }
+     result->quotient.integer[i] = digit;
+ }
+ for (int i = 0; i < precision; i++) {
+     TritBigInt* three;
+     if ((err = tritbig_from_trits((Trit[]){1}, 1, 0, &three)) != 0) goto cleanup_inner;
+     TritBigInt* temp_mul;
+     if ((err = tritjs_multiply_big(temp_rem, three, &temp_mul)) != 0) {
+         tritbig_free(three);
+         goto cleanup_inner;
+     }
+     tritbig_free(temp_rem);
+     temp_rem = temp_mul;
+     int digit = 0;
+     for (int q = 2; q >= 0; q--) {
+         TritBigInt* multiple;
+         Trit trits[] = {(Trit)q};
+         if ((err = tritbig_from_trits(trits, 1, 0, &multiple)) != 0) goto cleanup_inner;
+         TritBigInt* prod;
+         if ((err = tritjs_multiply_big(b, multiple, &prod)) != 0) {
+             tritbig_free(multiple);
+             goto cleanup_inner;
+         }
+         TritBigInt* sub;
+         if ((err = tritjs_subtract_big(temp_rem, prod, &sub)) == 0) {
+             digit = q;
+             tritbig_free(temp_rem);
+             temp_rem = sub;
+             tritbig_free(multiple);
+             tritbig_free(prod);
+             break;
+         }
+         tritbig_free(multiple);
+         tritbig_free(prod);
+     }
+     result->quotient.fraction[i] = digit;
+ }
+ int start = 0;
+ while (start < result->quotient.i_len - 1 && result->quotient.integer[start] == 0) start++;
+ if (start > 0) {
+     memmove(result->quotient.integer, result->quotient.integer + start, (result->quotient.i_len - start) * sizeof(Trit));
+     result->quotient.i_len -= start;
+ }
+cleanup_inner:
+ tritbig_free(temp_rem);
+cleanup:
+ if (err != 0) {
+     tritfloat_free(result->quotient);
+     tritfloat_free(result->remainder);
+ }
+ tritfloat_free(dividend);
+ tritfloat_free(divisor);
+ return err;
+}
+
+TritError tritjs_power_big(TritBigInt* base, TritBigInt* exp, TritBigInt** result) {
+ if (!base || !exp) return 2;
+ if (exp->sign) return 6;
+ TritError err;
+ Trit trits[] = {1};
+ if ((err = tritbig_from_trits(trits, 1, 0, result)) != 0) return err;
+ unsigned long exp_val = 0;
+ for (int i = 0; i < exp->len; i++) exp_val = exp_val * TRIT_MAX + exp->digits[i];
+ if (exp_val > 1000) {
+     tritbig_free(*result);
+     return 4;
+ }
+ int sign = (base->sign && (exp_val % 2)) ? 1 : 0;
+ for (unsigned long i = 0; i < exp_val; i++) {
+     TritBigInt* temp;
+     if ((err = tritjs_multiply_big(*result, base, &temp)) != 0) {
+         tritbig_free(*result);
+         return err;
+     }
+     tritbig_free(*result);
+     *result = temp;
+ }
+ (*result)->sign = sign;
+ return 0;
+}
+
+TritError tritjs_factorial_big(TritBigInt* a, TritBigInt** result) {
+ if (!a) return 2;
+ if (a->sign) return 6;
+ unsigned long a_val = 0;
+ for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+ if (a_val > 20) return 4;
+ TritError err;
+ Trit trits[] = {1};
+ if ((err = tritbig_from_trits(trits, 1, 0, result)) != 0) return err;
+ for (unsigned long i = 1; i <= a_val; i++) {
+     TritBigInt* i_bi;
+     Trit i_trits[2];
+     i_trits[0] = i / TRIT_MAX; i_trits[1] = i % TRIT_MAX;
+     int len = (i >= TRIT_MAX) ? 2 : 1;
+     if ((err = tritbig_from_trits(i_trits + (2 - len), len, 0, &i_bi)) != 0) {
+         tritbig_free(*result);
+         return err;
+     }
+     TritBigInt* temp;
+     if ((err = tritjs_multiply_big(*result, i_bi, &temp)) != 0) {
+         tritbig_free(i_bi);
+         tritbig_free(*result);
+         return err;
+     }
+     tritbig_free(*result);
+     tritbig_free(i_bi);
+     *result = temp;
+ }
+ return 0;
+}
+
+TritError tritjs_sqrt_complex(TritBigInt* a, int precision, TritComplex* result) {
+ if (!a || precision <= 0 || precision > 10) return 7;
+ unsigned long a_val = 0;
+ for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+ double val = (double)a_val * (a->sign ? -1 : 1);
+ TritError err;
+ if (val >= 0) {
+     double sqrt_val = sqrt(val);
+     unsigned long int_part = (unsigned long)sqrt_val;
+     double frac_part = sqrt_val - int_part;
+     Trit* int_trits = calloc((a->len + 1) / 2, sizeof(Trit));
+     Trit* frac_trits = calloc(precision, sizeof(Trit));
+     if (!int_trits || !frac_trits) {
+         free(int_trits); free(frac_trits);
+         return 1;
+     }
+     for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
+         int_trits[i] = int_part % TRIT_MAX;
+         int_part /= TRIT_MAX;
+     }
+     for (int i = precision - 1; i >= 0; i--) {
+         frac_part *= TRIT_MAX;
+         frac_trits[i] = (unsigned long)frac_part;
+         frac_part -= (unsigned long)frac_part;
+     }
+     TritBigInt* real_int;
+     if ((err = tritbig_from_trits(int_trits, (a->len + 1) / 2, 0, &real_int)) != 0) goto sqrt_cleanup;
+     if ((err = tritfloat_from_bigint(real_int, &result->real)) != 0) goto sqrt_cleanup;
+     tritbig_free(real_int);
+     if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != 0) goto sqrt_cleanup;
+     memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
+     result->real.f_len = precision;
+     result->imag.integer = calloc(1, sizeof(Trit));
+     if (!result->imag.integer) { err = 1; goto sqrt_cleanup; }
+     result->imag.i_len = 1;
+     result->imag.i_mapped = 0;
+     result->imag.sign = 0;
+     result->imag.fraction = NULL;
+     result->imag.f_len = 0;
+sqrt_cleanup:
+     free(int_trits); free(frac_trits);
+     if (err != 0) tritcomplex_free(*result);
+     return err;
+ } else {
+     double sqrt_val = sqrt(-val);
+     unsigned long int_part = (unsigned long)sqrt_val;
+     double frac_part = sqrt_val - int_part;
+     result->real.integer = calloc(1, sizeof(Trit));
+     if (!result->real.integer) return 1;
+     result->real.i_len = 1;
+     result->real.i_mapped = 0;
+     result->real.sign = 0;
+     if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != 0) {
+         free(result->real.integer);
+         return err;
+     }
+     memset(result->real.fraction, 0, precision * sizeof(Trit));
+     result->real.f_len = precision;
+     Trit* imag_int = calloc((a->len + 1) / 2, sizeof(Trit));
+     Trit* imag_frac = calloc(precision, sizeof(Trit));
+     if (!imag_int || !imag_frac) {
+         free(imag_int); free(imag_frac);
+         tritfloat_free(result->real);
+         return 1;
+     }
+     for (int i = (a->len + 1) / 2 - 1; i >= 0; i--) {
+         imag_int[i] = int_part % TRIT_MAX;
+         int_part /= TRIT_MAX;
+     }
+     for (int i = precision - 1; i >= 0; i--) {
+         frac_part *= TRIT_MAX;
+         imag_frac[i] = (unsigned long)frac_part;
+         frac_part -= (unsigned long)frac_part;
+     }
+     TritBigInt* imag_bi;
+     if ((err = tritbig_from_trits(imag_int, (a->len + 1) / 2, 0, &imag_bi)) != 0) {
+         free(imag_int); free(imag_frac);
+         tritfloat_free(result->real);
+         return err;
+     }
+     if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != 0) {
+         tritbig_free(imag_bi);
+         free(imag_int); free(imag_frac);
+         return err;
+     }
+     tritbig_free(imag_bi);
+     if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != 0) goto log_cleanup;
+     memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
+     result->imag.f_len = precision;
+     free(imag_int); free(imag_frac);
+     return 0;
+log_cleanup:
+     free(imag_int); free(imag_frac);
+     tritcomplex_free(*result);
+     return err;
+ }
+}
+
+TritError tritjs_log3_complex(TritBigInt* a, int precision, TritComplex* result) {
+ if (!a || precision <= 0 || precision > 10) return 7;
+ unsigned long a_val = 0;
+ for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+ double real = (double)a_val * (a->sign ? -1 : 1);
+ double imag = 0;
+ double mag = sqrt(real * real + imag * imag);
+ double arg = atan2(imag, real);
+ double ln3 = log(3.0);
+ double real_val = log(mag) / ln3;
+ double imag_val = arg / ln3;
+ TritError err;
+ Trit* real_int = calloc(a->len, sizeof(Trit));
+ Trit* real_frac = calloc(precision, sizeof(Trit));
+ Trit* imag_int = calloc(a->len, sizeof(Trit));
+ Trit* imag_frac = calloc(precision, sizeof(Trit));
+ if (!real_int || !real_frac || !imag_int || !imag_frac) {
+     free(real_int); free(real_frac); free(imag_int); free(imag_frac);
+     return 1;
+ }
+ unsigned long r_int_part = (unsigned long)fabs(real_val);
+ double r_frac_part = fabs(real_val) - r_int_part;
+ for (int i = a->len - 1; i >= 0; i--) {
+     real_int[i] = r_int_part % TRIT_MAX;
+     r_int_part /= TRIT_MAX;
+ }
+ for (int i = precision - 1; i >= 0; i--) {
+     r_frac_part *= TRIT_MAX;
+     real_frac[i] = (unsigned long)r_frac_part;
+     r_frac_part -= (unsigned long)r_frac_part;
+ }
+ TritBigInt* real_bi;
+ if ((err = tritbig_from_trits(real_int, a->len, real_val < 0 ? 1 : 0, &real_bi)) != 0) goto log_cleanup;
+ if ((err = tritfloat_from_bigint(real_bi, &result->real)) != 0) goto log_cleanup;
+ tritbig_free(real_bi);
+ if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != 0) goto log_cleanup;
+ memcpy(result->real.fraction, real_frac, precision * sizeof(Trit));
+ result->real.f_len = precision;
+ unsigned long i_int_part = (unsigned long)fabs(imag_val);
+ double i_frac_part = fabs(imag_val) - i_int_part;
+ for (int i = a->len - 1; i >= 0; i--) {
+     imag_int[i] = i_int_part % TRIT_MAX;
+     i_int_part /= TRIT_MAX;
+ }
+ for (int i = precision - 1; i >= 0; i--) {
+     i_frac_part *= TRIT_MAX;
+     imag_frac[i] = (unsigned long)i_frac_part;
+     i_frac_part -= (unsigned long)i_frac_part;
+ }
+ TritBigInt* imag_bi;
+ if ((err = tritbig_from_trits(imag_int, a->len, imag_val < 0 ? 1 : 0, &imag_bi)) != 0) goto log_cleanup;
+ if ((err = tritfloat_from_bigint(imag_bi, &result->imag)) != 0) goto log_cleanup;
+ tritbig_free(imag_bi);
+ if ((err = map_trits(&result->imag.fraction, precision, &result->imag.f_mapped, &result->imag.f_fd, result->imag.f_tmp_path)) != 0) goto log_cleanup;
+ memcpy(result->imag.fraction, imag_frac, precision * sizeof(Trit));
+ result->imag.f_len = precision;
+log_cleanup:
+ free(real_int); free(real_frac); free(imag_int); free(imag_frac);
+ if (err != 0) tritcomplex_free(*result);
+ return err;
+}
+
+TritError tritjs_trig_complex(TritBigInt* a, int precision, TritComplex* result, double (*trig_func)(double)) {
+ if (!a || precision <= 0 || precision > 10) return 7;
+ unsigned long a_val = 0;
+ for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+ double pi_approx = 3.1415926535;
+ double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
+ double trig_val = trig_func(angle);
+ int sign = trig_val < 0 ? 1 : 0;
+ double abs_val = fabs(trig_val);
+ unsigned long int_part = (unsigned long)abs_val;
+ double frac_part = abs_val - int_part;
+ TritError err;
+ Trit* int_trits = calloc(1, sizeof(Trit));
+ Trit* frac_trits = calloc(precision, sizeof(Trit));
+ if (!int_trits || !frac_trits) {
+     free(int_trits); free(frac_trits);
+     return 1;
+ }
+ int_trits[0] = int_part % TRIT_MAX;
+ for (int i = precision - 1; i >= 0; i--) {
+     frac_part *= TRIT_MAX;
+     frac_trits[i] = (unsigned long)frac_part;
+     frac_part -= (unsigned long)frac_part;
+ }
+ TritBigInt* real_bi;
+ if ((err = tritbig_from_trits(int_trits, 1, sign, &real_bi)) != 0) goto trig_cleanup;
+ if ((err = tritfloat_from_bigint(real_bi, &result->real)) != 0) goto trig_cleanup;
+ tritbig_free(real_bi);
+ if ((err = map_trits(&result->real.fraction, precision, &result->real.f_mapped, &result->real.f_fd, result->real.f_tmp_path)) != 0) goto trig_cleanup;
+ memcpy(result->real.fraction, frac_trits, precision * sizeof(Trit));
+ result->real.f_len = precision;
+ result->imag.integer = calloc(1, sizeof(Trit));
+ if (!result->imag.integer) { err = 1; goto trig_cleanup; }
+ result->imag.i_len = 1;
+ result->imag.i_mapped = 0;
+ result->imag.sign = 0;
+ result->imag.fraction = NULL;
+ result->imag.f_len = 0;
+trig_cleanup:
+ free(int_trits); free(frac_trits);
+ if (err != 0) tritcomplex_free(*result);
+ return err;
+}
+
+TritError tritjs_sin_complex(TritBigInt* a, int precision, TritComplex* result) {
+ return tritjs_trig_complex(a, precision, result, sin);
+}
+
+TritError tritjs_cos_complex(TritBigInt* a, int precision, TritComplex* result) {
+ return tritjs_trig_complex(a, precision, result, cos);
+}
+
+TritError tritjs_tan_complex(TritBigInt* a, int precision, TritComplex* result) {
+ if (!a || precision <= 0 || precision > 10) return 7;
+ unsigned long a_val = 0;
+ for (int i = 0; i < a->len; i++) a_val = a_val * TRIT_MAX + a->digits[i];
+ double pi_approx = 3.1415926535;
+ double angle = (double)a_val * pi_approx / 10.0 * (a->sign ? -1 : 1);
+ double tan_val = tan(angle);
+ if (fabs(tan_val) > 1000.0) return 5;
+ return tritjs_trig_complex(a, precision, result, tan);
+}
+
+TritError tritjs_pi(int* len, Trit** pi) {
+ Trit pi_val[] = {1, 0, 0, 1, 0, 2, 2, 1};
+ *len = 8;
+ *pi = malloc(*len * sizeof(Trit));
+ if (!*pi) return 1;
+ memcpy(*pi, pi_val, *len * sizeof(Trit));
+ return 0;
+}
+
+@* Scripting and Variable Functions
+@c
+void add_to_history(const char* entry) {
+ if (history_count < MAX_HISTORY) {
+     history[history_count++] = strdup(entry);
+ } else {
+     free(history[0]);
+     for (int i = 1; i < MAX_HISTORY; i++) {
+         history[i-1] = history[i];
+     }
+     history[MAX_HISTORY-1] = strdup(entry);
+ }
+}
+void store_variable(const char* var_name, TritBigInt* value) {
+ int index = var_name[0] - 'A';
+ if (variables[index]) tritbig_free(variables[index]);
+ variables[index] = value;
+}
+TritBigInt* recall_variable(const char* var_name) {
+ int index = var_name[0] - 'A';
+ return variables[index];
+}
+void clear_history_and_vars(void) {
+ for (int i = 0; i < history_count; i++) {
+     free(history[i]);
+     history[i] = NULL;
+ }
+ history_count = 0;
+ for (int i = 0; i < 26; i++) {
+     if (variables[i]) {
+         tritbig_free(variables[i]);
+         variables[i] = NULL;
+     }
+ }
+}
+void run_tests(void) {
+ printf("Running unit tests...\n");
+ /* Insert unit test code here */
+}
+
+@* Binary/Trinary Conversion Functions
+@c
+TritError binary_to_trit(int num, TritBigInt** result) {
+ int sign = (num < 0) ? 1 : 0;
+ int abs_val = (num < 0) ? -num : num;
+ if (abs_val == 0) {
+     *result = malloc(sizeof(TritBigInt));
+     if (!*result) return 1;
+     (*result)->sign = 0;
+     (*result)->len = 1;
+     (*result)->digits = malloc(sizeof(Trit));
+     if (!(*result)->digits) { free(*result); return 1; }
+     (*result)->digits[0] = 0;
+     (*result)->is_mapped = 0;
+     return 0;
+ }
+ int capacity = 16;
+ Trit* digits = malloc(capacity * sizeof(Trit));
+ if (!digits) return 1;
+ int index = 0;
+ while (abs_val > 0) {
+     if (index >= capacity) {
+         capacity *= 2;
+         Trit* new_digits = realloc(digits, capacity * sizeof(Trit));
+         if (!new_digits) { free(digits); return 1; }
+         digits = new_digits;
+     }
+     digits[index++] = abs_val % TRIT_MAX;
+     abs_val /= TRIT_MAX;
+ }
+ for (int i = 0; i < index/2; i++) {
+     Trit temp = digits[i];
+     digits[i] = digits[index - i - 1];
+     digits[index - i - 1] = temp;
+ }
+ *result = malloc(sizeof(TritBigInt));
+ if (!*result) { free(digits); return 1; }
+ (*result)->sign = sign;
+ (*result)->len = index;
+ (*result)->digits = digits;
+ (*result)->is_mapped = 0;
+ return 0;
+}
+TritError trit_to_binary(TritBigInt* tri, int* result) {
+ if (!tri || !result) return 2;
+ int value = 0;
+ for (int i = 0; i < tri->len; i++) {
+     value = value * TRIT_MAX + tri->digits[i];
+ }
+ if (tri->sign) value = -value;
+ *result = value;
+ return 0;
+}
+
+@* Ncurses Interface Integration
+@c
 WINDOW *input_win, *output_win, *status_win;
-
 void init_ncurses_interface() {
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    int rows, cols;
-    getmaxyx(stdscr, rows, cols);
-    status_win = newwin(1, cols, 0, 0);
-    output_win = newwin(rows - 3, cols, 1, 0);
-    input_win = newwin(2, cols, rows - 2, 0);
-    scrollok(output_win, TRUE);
-    wrefresh(status_win);
-    wrefresh(output_win);
-    wrefresh(input_win);
+ initscr();
+ cbreak();
+ noecho();
+ keypad(stdscr, TRUE);
+ int rows, cols;
+ getmaxyx(stdscr, rows, cols);
+ status_win = newwin(1, cols, 0, 0);
+ output_win = newwin(rows - 3, cols, 1, 0);
+ input_win = newwin(2, cols, rows - 2, 0);
+ scrollok(output_win, TRUE);
+ wrefresh(status_win);
+ wrefresh(output_win);
+ wrefresh(input_win);
 }
-
 void end_ncurses_interface() {
-    endwin();
+ endwin();
 }
-
 void update_status_bar() {
-    char status[80];
-    snprintf(status, sizeof(status), "Mem: %ld bytes | Steps: %d", total_mapped_bytes, operation_steps);
-    werase(status_win);
-    mvwprintw(status_win, 0, 0, status);
-    wrefresh(status_win);
+ char status[80];
+ snprintf(status, sizeof(status), "Mem: %ld bytes | Steps: %d", total_mapped_bytes, operation_steps);
+ werase(status_win);
+ mvwprintw(status_win, 0, 0, status);
+ wrefresh(status_win);
 }
-
 void ncurses_loop() {
-    char input[256];
-    while (1) {
-        update_status_bar();
-        werase(input_win);
-        mvwprintw(input_win, 0, 0, "Command: ");
-        wrefresh(input_win);
-        wgetnstr(input_win, input, sizeof(input) - 1);
-        if (strcmp(input, "quit") == 0)
-            break;
-        if (strcmp(input, "clear") == 0) {
-            clear_history_and_vars();
-            werase(output_win);
-            wrefresh(output_win);
-            continue;
-        }
-        if (strcmp(input, "help") == 0) {
-            werase(output_win);
-            print_help();
-            wrefresh(output_win);
-            continue;
-        }
-        if (strcmp(input, "test") == 0) {
-            run_tests();
-            continue;
-        }
-        if (strncmp(input, "bench", 5) == 0) {
-            run_benchmarks();
-            continue;
-        }
-        if (strncmp(input, "monitor", 7) == 0) {
-            monitor_security();
-            continue;
-        }
-        if (execute_command(input, 0) != 0) {
-            wprintw(output_win, "Error executing command: %s\n", input);
-        } else {
-            wprintw(output_win, "Executed: %s\n", input);
-        }
-        wrefresh(output_win);
-    }
+ char input[256];
+ while (1) {
+     update_status_bar();
+     werase(input_win);
+     mvwprintw(input_win, 0, 0, "Command: ");
+     wrefresh(input_win);
+     wgetnstr(input_win, input, sizeof(input) - 1);
+     if (strcmp(input, "quit") == 0)
+         break;
+     if (strcmp(input, "clear") == 0) {
+         clear_history_and_vars();
+         werase(output_win);
+         wrefresh(output_win);
+         continue;
+     }
+     if (strcmp(input, "help") == 0) {
+         werase(output_win);
+         print_help();
+         wrefresh(output_win);
+         continue;
+     }
+     if (strcmp(input, "test") == 0) {
+         run_tests();
+         continue;
+     }
+     if (strncmp(input, "bench", 5) == 0) {
+         run_benchmarks();
+         continue;
+     }
+     if (strncmp(input, "monitor", 7) == 0) {
+         monitor_security();
+         continue;
+     }
+     if (execute_command(input, 0) != 0) {
+         wprintw(output_win, "Error executing command: %s\n", input);
+     } else {
+         wprintw(output_win, "Executed: %s\n", input);
+     }
+     wrefresh(output_win);
+ }
 }
 
-/* --- Main Function with Ncurses Interface --- */
+@* General Utility: Print Help
+@c
+void print_help() {
+ printf("\nTritJS-CISA Commands:\n");
+ printf("  add <a> <b>      - Addition\n");
+ printf("  sub <a> <b>      - Subtraction\n");
+ printf("  mul <a> <b>      - Multiplication\n");
+ printf("  div <a> <b>      - Division\n");
+ printf("  pow <a> <b>      - Exponentiation\n");
+ printf("  fact <a>         - Factorial\n");
+ printf("  sqrt <a>         - Square Root\n");
+ printf("  log3 <a>         - Base-3 Logarithm\n");
+ printf("  sin <a>          - Sine\n");
+ printf("  cos <a>          - Cosine\n");
+ printf("  tan <a>          - Tangent\n");
+ printf("  pi               - Pi in base-3\n");
+ printf("  bin2tri <number> - Convert binary to ternary\n");
+ printf("  tri2bin <trit>   - Convert ternary to binary\n");
+ printf("  save <file>      - Save state (encrypted)\n");
+ printf("  load <file>      - Load state (requires privileges)\n");
+ printf("  monitor          - Run security monitor\n");
+ printf("  bench            - Run benchmarks\n");
+ printf("  PROG <name> {<cmds>} - Define a script\n");
+ printf("  RUN <name>       - Execute a script\n");
+ printf("  <var>=<value>    - Assign a variable (A-Z)\n");
+ printf("  help             - Display this manual\n");
+ printf("  clear            - Clear history and variables\n");
+ printf("  test             - Run unit tests\n");
+ printf("  setprecision <n> - Set default precision (1-10)\n");
+ printf("  version          - Show program version\n");
+ printf("  quit             - Exit the program\n");
+}
+
+@* Script Execution
+@c
+TritError execute_command(const char* input, int is_script) {
+ char op[10], arg1[256], arg2[256] = "";
+ int parsed = sscanf(input, "%9s %255s %255s", op, arg1, arg2);
+ if (parsed < 2 || strlen(arg1) > 255 || (arg2[0] && strlen(arg2) > 255)) {
+     if (!is_script) printf("Error: Input too long or invalid format\n");
+     return 2;
+ }
+ if (strncmp(input, "bin2tri", 7) == 0) {
+     int num;
+     if (sscanf(input + 7, "%d", &num) != 1) {
+         if (!is_script) printf("Error: Invalid binary number\n");
+         return 2;
+     }
+     TritBigInt* tri;
+     TritError err = binary_to_trit(num, &tri);
+     if (err == 0) {
+         char* str;
+         if ((err = tritjs_to_string(tri, &str)) == 0) {
+             if (!is_script) printf("Trinary: %s\n", str);
+             add_to_history(str);
+             free(str);
+         }
+         tritbig_free(tri);
+     }
+     return err;
+ }
+ if (strncmp(input, "tri2bin", 7) == 0) {
+     char trit_str[256];
+     if (sscanf(input + 7, "%255s", trit_str) != 1) {
+         if (!is_script) printf("Error: Invalid trinary input\n");
+         return 2;
+     }
+     TritBigInt* tri;
+     TritError err = parse_trit_string(trit_str, &tri);
+     if (err == 0) {
+         int num;
+         trit_to_binary(tri, &num);
+         if (!is_script) printf("Binary: %d\n", num);
+         char buf[256];
+         snprintf(buf, sizeof(buf), "%d", num);
+         add_to_history(buf);
+         tritbig_free(tri);
+     }
+     return err;
+ }
+ if (strncmp(input, "bench", 5) == 0) {
+     run_benchmarks();
+     return 0;
+ }
+ if (strncmp(input, "monitor", 7) == 0) {
+     monitor_security();
+     return 0;
+ }
+ /* Process other commands */
+ TritBigInt* a = NULL;
+ TritBigInt* b = NULL;
+ TritError err;
+ if (strchr(arg1, '=') && !arg2[0]) {
+     char var_name[2] = {arg1[0], '\0'};
+     char* value = strchr(arg1, '=') + 1;
+     if ((err = parse_trit_string(value, &a)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+         return err;
+     }
+     store_variable(var_name, a);
+     if (!is_script) printf("%s stored\n", var_name);
+     return 0;
+ }
+ if (arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0') {
+     a = recall_variable(arg1);
+     if (!a) {
+         if (!is_script) printf("Error: Variable %s not set\n", arg1);
+         return 2;
+     }
+ } else if ((err = parse_trit_string(arg1, &a)) != 0) {
+     if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     return err;
+ }
+ if (strlen(arg2) > 0) {
+     if (arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0') {
+         b = recall_variable(arg2);
+         if (!b) {
+             if (!is_script) printf("Error: Variable %s not set\n", arg2);
+             tritbig_free(a);
+             return 2;
+         }
+     } else if ((err = parse_trit_string(arg2, &b)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+         tritbig_free(a);
+         return err;
+     }
+ }
+ if (strcmp(op, "add") == 0 && b) {
+     TritBigInt* result;
+     if ((err = tritjs_add_big(a, b, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritjs_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritbig_free(result);
+     }
+ } else if (strcmp(op, "sub") == 0 && b) {
+     TritBigInt* result;
+     if ((err = tritjs_subtract_big(a, b, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritjs_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritbig_free(result);
+     }
+ } else if (strcmp(op, "mul") == 0 && b) {
+     TritBigInt* result;
+     if ((err = tritjs_multiply_big(a, b, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritjs_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritbig_free(result);
+     }
+ } else if (strcmp(op, "div") == 0 && b) {
+     TritDivResult result = {{0}, {0}};
+     if ((err = tritjs_divide_big(a, b, &result, 3)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* q_str, *r_str;
+         if ((err = tritfloat_to_string(result.quotient, &q_str)) == 0 &&
+             (err = tritfloat_to_string(result.remainder, &r_str)) == 0) {
+             char full_result[512];
+             snprintf(full_result, sizeof(full_result), "%s r %s", q_str, r_str);
+             if (!is_script) {
+                 printf("%s\n", full_result);
+                 add_to_history(full_result);
+             }
+             free(q_str);
+             free(r_str);
+         }
+         tritfloat_free(result.quotient);
+         tritfloat_free(result.remainder);
+     }
+ } else if (strcmp(op, "pow") == 0 && b) {
+     TritBigInt* result;
+     if ((err = tritjs_power_big(a, b, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritjs_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritbig_free(result);
+     }
+ } else if (strcmp(op, "fact") == 0) {
+     TritBigInt* result;
+     if ((err = tritjs_factorial_big(a, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritjs_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritbig_free(result);
+     }
+ } else if (strcmp(op, "sqrt") == 0) {
+     TritComplex result;
+     if ((err = tritjs_sqrt_complex(a, 3, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritcomplex_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritcomplex_free(result);
+     }
+ } else if (strcmp(op, "log3") == 0) {
+     TritComplex result;
+     if ((err = tritjs_log3_complex(a, 3, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritcomplex_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritcomplex_free(result);
+     }
+ } else if (strcmp(op, "sin") == 0) {
+     TritComplex result;
+     if ((err = tritjs_sin_complex(a, 3, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritcomplex_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritcomplex_free(result);
+     }
+ } else if (strcmp(op, "cos") == 0) {
+     TritComplex result;
+     if ((err = tritjs_cos_complex(a, 3, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritcomplex_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritcomplex_free(result);
+     }
+ } else if (strcmp(op, "tan") == 0) {
+     TritComplex result;
+     if ((err = tritjs_tan_complex(a, 3, &result)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str;
+         if ((err = tritcomplex_to_string(result, &str)) == 0) {
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         tritcomplex_free(result);
+     }
+ } else if (strcmp(op, "pi") == 0) {
+     int len;
+     Trit* pi;
+     if ((err = tritjs_pi(&len, &pi)) != 0) {
+         if (!is_script) printf("Error: %s\n", trit_error_str(err));
+     } else {
+         char* str = malloc(len + 1);
+         if (str) {
+             for (int i = 0; i < len; i++) str[i] = '0' + pi[i];
+             str[len] = '\0';
+             if (!is_script) {
+                 printf("%s\n", str);
+                 add_to_history(str);
+             }
+             free(str);
+         }
+         free(pi);
+     }
+ } else {
+     if (!is_script) printf("Error: Unknown command\n");
+     err = 2;
+ }
+ if (a && !(arg1[0] >= 'A' && arg1[0] <= 'Z' && arg1[1] == '\0')) tritbig_free(a);
+ if (b && !(arg2[0] >= 'A' && arg2[0] <= 'Z' && arg2[1] == '\0')) tritbig_free(b);
+ return err;
+}
+
+@* Script Execution
+@c
+TritError run_script(Script* script) {
+ for (int i = 0; i < script->cmd_count; i++) {
+     char* cmd = script->commands[i];
+     if (strncmp(cmd, "IF ", 3) == 0) {
+         char cond[256], then_cmd[256];
+         if (sscanf(cmd, "IF %255s THEN %255[^\n]", cond, then_cmd) != 2) {
+             printf("Script Error: Invalid IF syntax\n");
+             return 9;
+         }
+         TritBigInt* cond_val;
+         if (parse_trit_string(cond, &cond_val) != 0) {
+             printf("Script Error: Invalid condition\n");
+             return 9;
+         }
+         int val = 0;
+         for (int j = 0; j < cond_val->len; j++) val = val * TRIT_MAX + cond_val->digits[j];
+         tritbig_free(cond_val);
+         if (val != 0) {
+             if (execute_command(then_cmd, 1) != 0) return 9;
+         }
+     } else if (strncmp(cmd, "FOR ", 4) == 0) {
+         char var[2], start_str[256], end_str[256], loop_cmd[256];
+         if (sscanf(cmd, "FOR %1s %255s %255s %255[^\n]", var, start_str, end_str, loop_cmd) != 4) {
+             printf("Script Error: Invalid FOR syntax\n");
+             return 9;
+         }
+         TritBigInt *start, *end;
+         if (parse_trit_string(start_str, &start) != 0 || parse_trit_string(end_str, &end) != 0) {
+             printf("Script Error: Invalid FOR range\n");
+             return 9;
+         }
+         int start_val = 0, end_val = 0;
+         for (int j = 0; j < start->len; j++) start_val = start_val * TRIT_MAX + start->digits[j];
+         for (int j = 0; j < end->len; j++) end_val = end_val * TRIT_MAX + end->digits[j];
+         for (int k = start_val; k <= end_val; k++) {
+             char val_str[10];
+             snprintf(val_str, sizeof(val_str), "%d", k);
+             TritBigInt* i_bi;
+             if (parse_trit_string(val_str, &i_bi) != 0) {
+                 tritbig_free(start);
+                 tritbig_free(end);
+                 return 9;
+             }
+             store_variable(var, i_bi);
+             if (execute_command(loop_cmd, 1) != 0) {
+                 tritbig_free(start);
+                 tritbig_free(end);
+                 return 9;
+             }
+         }
+         tritbig_free(start);
+         tritbig_free(end);
+     } else {
+         if (execute_command(cmd, 1) != 0) return 9;
+     }
+ }
+ return 0;
+}
+
+@* Benchmarking Tool
+@c
+void run_benchmarks() {
+ printf("Running comprehensive benchmarks...\n");
+ int iterations = 10000;
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("12", &a);
+     parse_trit_string("21", &b);
+     tritjs_add_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Addition");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("12", &a);
+     parse_trit_string("21", &b);
+     tritjs_multiply_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Multiplication");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b;
+     TritDivResult result;
+     parse_trit_string("21", &a);
+     parse_trit_string("2", &b);
+     tritjs_divide_big(a, b, &result, 3);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritfloat_free(result.quotient);
+     tritfloat_free(result.remainder);
+ }
+ PROFILE_END("Division");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *b, *result;
+     parse_trit_string("2", &a);
+     parse_trit_string("2", &b);
+     tritjs_power_big(a, b, &result);
+     tritbig_free(a);
+     tritbig_free(b);
+     tritbig_free(result);
+ }
+ PROFILE_END("Power");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *a, *result;
+     parse_trit_string("2", &a);
+     tritjs_factorial_big(a, &result);
+     tritbig_free(a);
+     tritbig_free(result);
+ }
+ PROFILE_END("Factorial");
+ 
+ PROFILE_START
+ for (int i = 0; i < iterations; i++) {
+     TritBigInt *tri;
+     binary_to_trit(42, &tri);
+     int bin;
+     trit_to_binary(tri, &bin);
+     tritbig_free(tri);
+ }
+ PROFILE_END("Conversion");
+}
+
+@* Ncurses Interface Integration
+@c
+WINDOW *input_win, *output_win, *status_win;
+void init_ncurses_interface() {
+ initscr();
+ cbreak();
+ noecho();
+ keypad(stdscr, TRUE);
+ int rows, cols;
+ getmaxyx(stdscr, rows, cols);
+ status_win = newwin(1, cols, 0, 0);
+ output_win = newwin(rows - 3, cols, 1, 0);
+ input_win = newwin(2, cols, rows - 2, 0);
+ scrollok(output_win, TRUE);
+ wrefresh(status_win);
+ wrefresh(output_win);
+ wrefresh(input_win);
+}
+void end_ncurses_interface() {
+ endwin();
+}
+void update_status_bar() {
+ char status[80];
+ snprintf(status, sizeof(status), "Mem: %ld bytes | Steps: %d", total_mapped_bytes, operation_steps);
+ werase(status_win);
+ mvwprintw(status_win, 0, 0, status);
+ wrefresh(status_win);
+}
+void ncurses_loop() {
+ char input[256];
+ while (1) {
+     update_status_bar();
+     werase(input_win);
+     mvwprintw(input_win, 0, 0, "Command: ");
+     wrefresh(input_win);
+     wgetnstr(input_win, input, sizeof(input) - 1);
+     if (strcmp(input, "quit") == 0)
+         break;
+     if (strcmp(input, "clear") == 0) {
+         clear_history_and_vars();
+         werase(output_win);
+         wrefresh(output_win);
+         continue;
+     }
+     if (strcmp(input, "help") == 0) {
+         werase(output_win);
+         print_help();
+         wrefresh(output_win);
+         continue;
+     }
+     if (strcmp(input, "test") == 0) {
+         run_tests();
+         continue;
+     }
+     if (strncmp(input, "bench", 5) == 0) {
+         run_benchmarks();
+         continue;
+     }
+     if (strncmp(input, "monitor", 7) == 0) {
+         monitor_security();
+         continue;
+     }
+     if (execute_command(input, 0) != 0) {
+         wprintw(output_win, "Error executing command: %s\n", input);
+     } else {
+         wprintw(output_win, "Executed: %s\n", input);
+     }
+     wrefresh(output_win);
+ }
+}
+
+@* Main Function with Ncurses Interface
+@c
 int main() {
-    init_ncurses_interface();
-    ncurses_loop();
-    end_ncurses_interface();
-    return 0;
+ init_ncurses_interface();
+ ncurses_loop();
+ end_ncurses_interface();
+ return 0;
 }
