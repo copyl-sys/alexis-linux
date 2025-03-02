@@ -1,4 +1,3 @@
-
 @* TritJS-CISA: A Ternary Calculator with CISA-Compliant Security, POSIX Enhancements, Comprehensive Benchmarking, and Ncurses Interface.
 This document defines \.{TritJS-CISA}, a ternary (base‑3) scientific calculator built for cybersecurity and educational use.
 In this revision, we incorporate enhanced security features (encrypted state management, secure audit logging with digital signing stubs, and access controls),
