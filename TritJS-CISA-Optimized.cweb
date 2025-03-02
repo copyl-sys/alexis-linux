@@ -26,7 +26,7 @@
  *
  * == Installation ==
  * 1. Compile using:
- *      gcc -DUSE_READLINE -o tritjs_cisa_optimized TritJS-CISA-Optimized.w -lm -lreadline \
+ *      gcc -DUSE_READLINE -o tritjs_cisa_optimized TritJS-CISA-Optimized.c -lm -lreadline \
  *          -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses -lcrypto -lpthread -llua
  * 2. Run with:
  *      ./tritjs_cisa_optimized
