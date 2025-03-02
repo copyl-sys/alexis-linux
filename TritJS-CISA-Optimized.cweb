@@ -1,25 +1,32 @@
-@* USER MANUAL (preserved and updated):
- *
- * @* TritJS-CISA-Optimized: A Ternary Calculator with Advanced Features
+/***********************************************************************
+ * TritJS-CISA-Optimized: A Ternary Calculator with Advanced Features
  *
  * This program has been optimized for:
  *   - Improved memory management and safe dynamic reallocation.
  *   - Faster base conversion by grouping four base‑3 digits at a time.
- *   - Efficient multiplication using a Karatsuba algorithm (with fallback to naïve multiplication for small inputs).
- *   - Enhanced security including file locking on audit logs and secure memory zeroing (where supported) using FIPS–validated crypto.
+ *   - Efficient multiplication using a Karatsuba algorithm (with a fallback
+ *     to naïve multiplication for small inputs).
+ *   - Enhanced security including file locking on audit logs and secure memory
+ *     zeroing (where supported) using FIPS–validated crypto.
  *   - Real-time intrusion detection via a background monitoring thread.
- *   - Extended scripting by embedding Lua.
- *   - A responsive ncurses UI with color support and dynamic terminal resizing.
+ *   - Extended scripting via an embedded Lua interpreter exposing:
+ *         • Scientific functions (sqrt, log3, sin, cos, tan, pi)
+ *         • Conversion routines (bin2tri, tri2bin, balanced/unbalanced ternary)
+ *         • State management (save/load state)
+ *         • Interface helpers (e.g. help, clear)
+ *         • Ternary logical operations (AND, OR, NOT, XOR)
+ *   - A responsive ncurses UI with color support and dynamic resizing.
+ *   - Build automation via a Makefile & CI/CD pipeline.
  *
  * == Features ==
  * • Arithmetic: add, sub, mul, div, pow, fact
  * • Scientific: sqrt, log3, sin, cos, tan, pi (via double conversion)
- * • Conversions: bin2tri, tri2bin (optimized conversion routines), balanced/unbalanced ternary parsing
+ * • Conversions: bin2tri, tri2bin (optimized conversion routines), balanced/unbalanced parsing
  * • State Management: save and load encrypted/signed session states
- * • Security: secure audit logging (with file locking), secure memory clearing, and intrusion detection
+ * • Security: secure audit logging (with file locking) and secure memory clearing, plus intrusion detection
  * • Benchmarking: bench command runs performance tests
- * • Scripting & Variables: PROG/RUN, A=102, IF, FOR, plus Lua scripting
- * • Interface: enhanced ncurses-based UI (with color support and dynamic terminal resizing)
+ * • Scripting & Variables: PROG/RUN, A=102, IF, FOR, plus extensive Lua scripting
+ * • Interface: enhanced ncurses-based UI (with color and terminal resize support)
  *
  * == Compilation ==
  *   gcc -DUSE_READLINE -o tritjs_cisa_optimized tritjs_cisa_optimized.c -lm -lreadline \
@@ -29,39 +36,15 @@
  *   ./tritjs_cisa_optimized
  *
  * == Integration Test Cases ==
- *   On startup, the program runs integration tests that verify:
+ *   On startup, the program runs tests for:
  *     - Encryption/decryption round-trip.
- *     - Lua scripting (a simple add function).
+ *     - Lua scripting (testing exposed functions such as addition and scientific ops).
  *     - Intrusion detection simulation.
- *
- * == Build Automation ==
- *   A Makefile and CI/CD pipeline automate builds, tests, and deployments.
  *
  * == License ==
  * GNU General Public License (GPL)
-@x
-/***********************************************************************
- * TritJS-CISA-Optimized: A Ternary Calculator with Advanced Features
- *
- * This literate program integrates:
- *   - Robust memory management with dynamic allocation and optional mmap.
- *   - Optimized base conversion (grouping four base‑3 digits into a base‑81 representation).
- *   - Efficient multiplication using a Karatsuba algorithm with caching.
- *   - Full division and modulo using a long division algorithm.
- *   - Shift operations (left shift = multiply by 3^n, right shift = divide by 3^n).
- *   - Digit‑wise ternary logical operations: AND, OR, NOT, XOR.
- *   - Scientific functions (sqrt, log3, sin, cos, tan, pi) via conversion to double.
- *   - Balanced ternary parsing and conversion between balanced/unbalanced formats.
- *   - State management with encrypted/signed session states.
- *   - Enhanced security via FIPS–validated crypto, secure audit logging (with file locking), and intrusion detection.
- *   - Extended scripting through an embedded Lua interpreter.
- *   - A responsive ncurses UI with color support and dynamic resizing.
- *   - Automated builds and testing via a Makefile and CI/CD pipeline.
  ***********************************************************************/
-@+
 
-@* Section 1. Preliminaries and Includes
-@c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,16 +60,14 @@
 #include <readline/history.h>
 #endif
 #include <errno.h>
-#include <sys/file.h>  /* For file locking in audit log */
+#include <sys/file.h>
 #include <openssl/evp.h>
 #include <pthread.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
-@-Preliminaries
 
-@* Section 2. Global Configuration and Data Structures
-@c
+/* Global Configuration */
 #define ENABLE_VERBOSE_LOGGING 1
 #define VERSION "2.0-upgrade-optimized"
 
@@ -95,26 +76,26 @@
 
 typedef int TritError;  /* 0=OK, 1=MemAlloc, 2=InvalidInput, 3=DivZero, 4=Overflow,
                            5=Undefined, 6=Negative, 7=PrecisionErr, 8=MMapFail, 9=ScriptErr */
-
 #if ENABLE_VERBOSE_LOGGING
 #define LOG_ERROR(err, context) log_error(err, context, __FILE__, __LINE__)
 #else
 #define LOG_ERROR(err, context) log_error(err, context)
 #endif
 
+/* Data Structures */
 typedef struct {
-    int sign;                 /* 0=positive, 1=negative */
-    unsigned char *digits;    /* Base‑81 digits (little-endian) */
-    size_t len;               /* Number of digits */
-    int is_mapped;            /* 1 if allocated with mmap */
-    int fd;                   /* File descriptor (if using mmap) */
-    char tmp_path[32];        /* Temporary file path */
+    int sign;                 
+    unsigned char *digits;    
+    size_t len;               
+    int is_mapped;            
+    int fd;                   
+    char tmp_path[32];        
 } T81BigInt;
 
 typedef struct {
     int sign;
-    unsigned char* integer;   /* Base‑81 integer part */
-    unsigned char* fraction;  /* Base‑81 fractional part */
+    unsigned char* integer;
+    unsigned char* fraction;
     size_t i_len, f_len;
     int i_mapped, f_mapped;
     int i_fd, f_fd;
@@ -139,10 +120,8 @@ typedef struct {
     char commands[MAX_SCRIPT_CMDS][256];
     int cmd_count;
 } Script;
-@-Section2
 
-@* Section 3. Global Variables
-@c
+/* Global Variables */
 static FILE* audit_log = NULL;
 static long total_mapped_bytes = 0;
 static int operation_steps = 0;
@@ -156,10 +135,8 @@ static Script scripts[10] = {0};
 static int script_count = 0;
 
 static WINDOW *input_win, *output_win, *status_win;
-@-Section3
 
-@* Section 4. Function Prototypes
-@c
+/* Function Prototypes */
 TritError tritjs_add_big(T81BigInt* A, T81BigInt* B, T81BigInt** result);
 TritError tritjs_subtract_big(T81BigInt* A, T81BigInt* B, T81BigInt** result);
 TritError tritjs_multiply_big(T81BigInt* a, T81BigInt* b, T81BigInt** result);
@@ -178,10 +155,8 @@ TritError binary_to_trit(int num, T81BigInt** out);
 TritError trit_to_binary(T81BigInt* x, int* outVal);
 void tritbig_free(T81BigInt* x);
 TritError parse_balanced_trit_string(const char* s, T81BigInt** out);
-@-Section4
 
-@* Section 5. Logging and Error Handling
-@c
+/* --- Logging and Error Handling --- */
 static const char* trit_error_str(TritError err) {
     switch(err){
         case 0: return "No error";
@@ -206,10 +181,8 @@ static void log_error(TritError err, const char* context, const char* file, int 
             ctime(&now), err, trit_error_str(err), context, file, line);
     fflush(audit_log);
 }
-@-Section5
 
-@* Section 6. Memory Management
-@c
+/* --- Memory Management --- */
 static TritError allocate_digits(T81BigInt *x, size_t lengthNeeded) {
     size_t bytesNeeded = (lengthNeeded == 0 ? 1 : lengthNeeded);
     x->len = lengthNeeded;
@@ -252,10 +225,8 @@ static void t81bigint_free(T81BigInt* x) {
     }
     memset(x, 0, sizeof(*x));
 }
-@-Section6
 
-@* Section 7. Audit Logging
-@c
+/* --- Audit Logging --- */
 static void init_audit_log() {
     audit_log = fopen("/var/log/tritjs_cisa.log", "a");
     if (!audit_log) {
@@ -265,10 +236,8 @@ static void init_audit_log() {
         flock(fileno(audit_log), LOCK_EX);
     }
 }
-@-Section7
 
-@* Section 8. Base Conversion and Parsing
-@c
+/* --- Base Conversion and Parsing --- */
 static TritError parse_trit_string_base81_optimized(const char* str, T81BigInt* out) {
     if (!str || !str[0]) return 2;
     memset(out, 0, sizeof(*out));
@@ -420,11 +389,7 @@ void tritbig_free(T81BigInt* x) {
     free(x);
 }
 
-/* --- Additional Parsing: Balanced Ternary ---
-   Balanced ternary uses '-' or '–' for -1, '0' for 0, and '+' for +1.
-   We convert balanced input to our internal unbalanced representation (0,1,2):
-       -1 => 0, 0 => 1, 1 => 2.
-*/
+/* --- Balanced Ternary Parsing --- */
 TritError parse_balanced_trit_string(const char* s, T81BigInt** out) {
     if (!s) return 2;
     size_t len = strlen(s);
@@ -442,16 +407,20 @@ TritError parse_balanced_trit_string(const char* s, T81BigInt** out) {
     free(unb);
     return e;
 }
-@-Section8
 
-@* Section 9. Arithmetic Operations: Addition and Subtraction
-@c
+/* --- Arithmetic Operations: Addition and Subtraction --- */
 static int cmp_base81(const unsigned char* a, size_t a_len,
                       const unsigned char* b, size_t b_len) {
     if (a_len > b_len) {
-        for (size_t i = a_len - 1; i >= b_len; i--) { if (a[i] != 0) return 1; if (i == 0) break; }
+        for (size_t i = a_len - 1; i >= b_len; i--) {
+            if (a[i] != 0) return 1;
+            if (i == 0) break;
+        }
     } else if (b_len > a_len) {
-        for (size_t i = b_len - 1; i >= a_len; i--) { if (b[i] != 0) return -1; if (i == 0) break; }
+        for (size_t i = b_len - 1; i >= a_len; i--) {
+            if (b[i] != 0) return -1;
+            if (i == 0) break;
+        }
     }
     size_t m = (a_len < b_len ? a_len : b_len);
     for (ssize_t i = m - 1; i >= 0; i--) {
@@ -492,7 +461,8 @@ TritError tritjs_add_big(T81BigInt* A, T81BigInt* B, T81BigInt** result) {
         int largerSign;
         if (c > 0) { larger = A; smaller = B; largerSign = A->sign; }
         else if (c < 0) { larger = B; smaller = A; largerSign = B->sign; }
-        else { if (allocate_digits(*result, 1)) { free(*result); return 1; } (*result)->digits[0] = 0; return 0; }
+        else { if (allocate_digits(*result, 1)) { free(*result); return 1; }
+               (*result)->digits[0] = 0; return 0; }
         (*result)->sign = largerSign;
         if (allocate_digits(*result, larger->len)) { free(*result); return 1; }
         memcpy((*result)->digits, larger->digits, larger->len);
@@ -526,10 +496,8 @@ TritError tritjs_subtract_big(T81BigInt* A, T81BigInt* B, T81BigInt** result) {
     tmp.sign = oldsign;
     return e;
 }
-@-Section9
 
-@* Section 10. Multiplication (Karatsuba with Cache)
-@c
+/* --- Multiplication: Karatsuba with Cache --- */
 #define MUL_CACHE_SIZE 8
 typedef struct {
     char key[128];
@@ -696,10 +664,8 @@ TritError tritjs_multiply_big(T81BigInt* a, T81BigInt* b, T81BigInt** result) {
     if (e) { free(*result); *result = NULL; }
     return e;
 }
-@-Section10
 
-@* Section 11. Factorial and Power Functions
-@c
+/* --- Factorial and Power Functions --- */
 static int is_small_value(const T81BigInt *x) {
     return (x->len == 1 && x->digits[0] < 81);
 }
@@ -765,10 +731,8 @@ TritError tritjs_power_big(T81BigInt* base, T81BigInt* exp, T81BigInt** result) 
         (*result)->sign = 1;
     return 0;
 }
-@-Section11
 
-@* Section 12. Scientific Functions via Double Conversion
-@c
+/* --- Scientific Functions via Double Conversion --- */
 static double t81bigint_to_double(T81BigInt* x) {
     int sign = x->sign ? -1 : 1;
     double accum = 0.0;
@@ -870,14 +834,14 @@ TritError tritjs_pi(int* len, int** pi) {
     memcpy(*pi, pi_val, 8 * sizeof(int));
     return 0;
 }
-@-Section12
 
-@* Section 13. Full Division and Modulo (Long Division Algorithm)
-@c
+/* --- Full Division and Modulo (Long Division Algorithm) --- */
 TritError tritjs_divide_big(T81BigInt* a, T81BigInt* b, T81BigInt** quotient, T81BigInt** remainder) {
     if (!a || !b) return 2;
     int b_zero = 1;
-    for (size_t i = 0; i < b->len; i++) { if (b->digits[i] != 0) { b_zero = 0; break; } }
+    for (size_t i = 0; i < b->len; i++) {
+        if (b->digits[i] != 0) { b_zero = 0; break; }
+    }
     if (b_zero) { LOG_ERROR(3, "tritjs_divide_big"); return 3; }
     *quotient = (T81BigInt*)calloc(1, sizeof(T81BigInt));
     *remainder = (T81BigInt*)calloc(1, sizeof(T81BigInt));
@@ -912,8 +876,13 @@ TritError tritjs_divide_big(T81BigInt* a, T81BigInt* b, T81BigInt** quotient, T8
                 prod->digits[j] = val % BASE_81;
                 carry = val / BASE_81;
             }
-            if (carry) { if (allocate_digits(prod, (*remainder)->len + 1)) return 1; prod->digits[(*remainder)->len] = carry; prod->len = (*remainder)->len + 1; }
-            else { prod->len = (*remainder)->len; }
+            if (carry) {
+                if (allocate_digits(prod, (*remainder)->len + 1)) return 1;
+                prod->digits[(*remainder)->len] = carry;
+                prod->len = (*remainder)->len + 1;
+            } else {
+                prod->len = (*remainder)->len;
+            }
             if (cmp_base81((*remainder)->digits, (*remainder)->len, prod->digits, prod->len) < 0) {
                 t81bigint_free(prod); free(prod);
                 break;
@@ -948,10 +917,8 @@ TritError tritjs_divide_big(T81BigInt* a, T81BigInt* b, T81BigInt** quotient, T8
     (*remainder)->sign = a->sign;
     return 0;
 }
-@-Section13
 
-@* Section 14. Shift Operations
-@c
+/* --- Shift Operations --- */
 TritError tritjs_left_shift(T81BigInt* a, int shift, T81BigInt** result) {
     if (!a || shift < 0) return 2;
     T81BigInt base;
@@ -994,10 +961,8 @@ TritError tritjs_right_shift(T81BigInt* a, int shift, T81BigInt** result) {
     if (!e) *result = q; else { tritbig_free(q); free(q); }
     return e;
 }
-@-Section14
 
-@* Section 15. Ternary Logical Operations
-@c
+/* --- Ternary Logical Operations --- */
 int ternary_and(int a, int b) { return a < b ? a : b; }
 int ternary_or(int a, int b) { return a > b ? a : b; }
 int ternary_not(int a) { return 2 - a; }
@@ -1063,158 +1028,447 @@ TritError tritjs_logical_xor(T81BigInt* A, T81BigInt* B, T81BigInt** result) {
     (*result)->sign = 0;
     return 0;
 }
-@-Section15
 
-@* Section 16. Scripting and Command Execution
-A simple command parser to invoke our operations.
-@c
-TritError execute_command(const char* input, int is_script) {
-    char op[16], arg1[256], arg2[256];
-    memset(op, 0, sizeof(op)); memset(arg1, 0, sizeof(arg1)); memset(arg2, 0, sizeof(arg2));
-    int parsed = sscanf(input, "%15s %255s %255s", op, arg1, arg2);
-    if (parsed < 1) { if (!is_script) printf("Error: invalid input\n"); return 2; }
-    if (strncmp(op, "bin2tri", 7) == 0) {
-        int val = 0;
-        if (sscanf(arg1, "%d", &val) != 1) { if (!is_script) printf("Error: invalid binary number\n"); return 2; }
-        T81BigInt* tri = NULL;
-        TritError e = binary_to_trit(val, &tri);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(tri, &s)) { if (!is_script) printf("Trinary: %s\n", s); free(s); }
-            tritbig_free(tri);
-        }
-        return e;
+/* --- Lua Integration --- */
+
+/* Lua binding for addition */
+static int l_c_add(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *result = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
     }
-    if (strncmp(op, "tri2bin", 7) == 0) {
-        T81BigInt* tri = NULL;
-        TritError e = parse_trit_string(arg1, &tri);
-        if (!e) {
-            int val;
-            if (!trit_to_binary(tri, &val)) { if (!is_script) printf("Binary: %d\n", val); }
-            tritbig_free(tri);
-        }
-        return e;
+    if (tritjs_add_big(A, B, &result) != 0) {
+        lua_pushstring(L, "Addition error");
+        lua_error(L);
     }
-    if (strncmp(op, "bal2unb", 8) == 0) {
-        T81BigInt* tri = NULL;
-        TritError e = parse_balanced_trit_string(arg1, &tri);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(tri, &s)) { if (!is_script) printf("Unbalanced: %s\n", s); free(s); }
-            tritbig_free(tri);
-        }
-        return e;
-    }
-    if (strncmp(op, "unb2bal", 8) == 0) {
-        T81BigInt* tri = NULL;
-        TritError e = parse_trit_string(arg1, &tri);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(tri, &s)) {
-                for (size_t i = 0; i < strlen(s); i++) {
-                    if (s[i] == '0') s[i] = '-';
-                    else if (s[i] == '1') s[i] = '0';
-                    else if (s[i] == '2') s[i] = '+';
-                }
-                if (!is_script) printf("Balanced: %s\n", s);
-                free(s);
-            }
-            tritbig_free(tri);
-        }
-        return e;
-    }
-    if (strcmp(op, "lshift") == 0) {
-        int shift;
-        if (sscanf(arg2, "%d", &shift) != 1) { if (!is_script) printf("Error: invalid shift\n"); return 2; }
-        T81BigInt* num = NULL;
-        if (parse_trit_string(arg1, &num)) return 2;
-        T81BigInt* res = NULL;
-        TritError e = tritjs_left_shift(num, shift, &res);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(res, &s)) { if (!is_script) printf("Left Shift: %s\n", s); free(s); }
-            tritbig_free(res);
-        }
-        tritbig_free(num);
-        return e;
-    }
-    if (strcmp(op, "rshift") == 0) {
-        int shift;
-        if (sscanf(arg2, "%d", &shift) != 1) { if (!is_script) printf("Error: invalid shift\n"); return 2; }
-        T81BigInt* num = NULL;
-        if (parse_trit_string(arg1, &num)) return 2;
-        T81BigInt* res = NULL;
-        TritError e = tritjs_right_shift(num, shift, &res);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(res, &s)) { if (!is_script) printf("Right Shift: %s\n", s); free(s); }
-            tritbig_free(res);
-        }
-        tritbig_free(num);
-        return e;
-    }
-    if (strcmp(op, "and") == 0) {
-        T81BigInt* A = NULL; T81BigInt* B = NULL;
-        if (parse_trit_string(arg1, &A) || parse_trit_string(arg2, &B)) return 2;
-        T81BigInt* R = NULL;
-        TritError e = tritjs_logical_and(A, B, &R);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(R, &s)) { if (!is_script) printf("AND: %s\n", s); free(s); }
-            tritbig_free(R);
-        }
-        tritbig_free(A); tritbig_free(B);
-        return e;
-    }
-    if (strcmp(op, "or") == 0) {
-        T81BigInt* A = NULL; T81BigInt* B = NULL;
-        if (parse_trit_string(arg1, &A) || parse_trit_string(arg2, &B)) return 2;
-        T81BigInt* R = NULL;
-        TritError e = tritjs_logical_or(A, B, &R);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(R, &s)) { if (!is_script) printf("OR: %s\n", s); free(s); }
-            tritbig_free(R);
-        }
-        tritbig_free(A); tritbig_free(B);
-        return e;
-    }
-    if (strcmp(op, "not") == 0) {
-        T81BigInt* A = NULL;
-        if (parse_trit_string(arg1, &A)) return 2;
-        T81BigInt* R = NULL;
-        TritError e = tritjs_logical_not(A, &R);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(R, &s)) { if (!is_script) printf("NOT: %s\n", s); free(s); }
-            tritbig_free(R);
-        }
-        tritbig_free(A);
-        return e;
-    }
-    if (strcmp(op, "xor") == 0) {
-        T81BigInt* A = NULL; T81BigInt* B = NULL;
-        if (parse_trit_string(arg1, &A) || parse_trit_string(arg2, &B)) return 2;
-        T81BigInt* R = NULL;
-        TritError e = tritjs_logical_xor(A, B, &R);
-        if (!e) {
-            char* s = NULL;
-            if (!t81bigint_to_trit_string(R, &s)) { if (!is_script) printf("XOR: %s\n", s); free(s); }
-            tritbig_free(R);
-        }
-        tritbig_free(A); tritbig_free(B);
-        return e;
-    }
-    if (!is_script) printf("Command executed: %s\n", input);
-    return 0;
+    char *res_str = NULL;
+    t81bigint_to_trit_string(result, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(result);
+    return 1;
 }
-@-Section16
 
-@* Section 17. Integration Test Cases
-Runs tests for encryption, Lua scripting, and intrusion detection.
-@c
+/* Lua binding for subtraction */
+static int l_c_sub(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *result = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_subtract_big(A, B, &result) != 0) {
+        lua_pushstring(L, "Subtraction error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(result, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(result);
+    return 1;
+}
+
+/* Lua binding for multiplication */
+static int l_c_mul(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *result = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_multiply_big(A, B, &result) != 0) {
+        lua_pushstring(L, "Multiplication error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(result, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(result);
+    return 1;
+}
+
+/* Lua binding for division (returns quotient and remainder) */
+static int l_c_div(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *quotient = NULL, *remainder = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_divide_big(A, B, &quotient, &remainder) != 0) {
+        lua_pushstring(L, "Division error");
+        lua_error(L);
+    }
+    char *q_str = NULL, *r_str = NULL;
+    t81bigint_to_trit_string(quotient, &q_str);
+    t81bigint_to_trit_string(remainder, &r_str);
+    lua_pushstring(L, q_str);
+    lua_pushstring(L, r_str);
+    free(q_str);
+    free(r_str);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(quotient);
+    tritbig_free(remainder);
+    return 2;
+}
+
+/* Lua binding for scientific functions: sqrt */
+static int l_c_sqrt(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    T81Complex comp;
+    if (tritjs_sqrt_complex(A, 5, &comp) != 0) {
+        lua_pushstring(L, "sqrt error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(&comp.real, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    return 1;
+}
+
+/* Lua binding for scientific functions: log3 */
+static int l_c_log3(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    T81Complex comp;
+    if (tritjs_log3_complex(A, 5, &comp) != 0) {
+        lua_pushstring(L, "log3 error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(&comp.real, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    return 1;
+}
+
+/* Lua binding for scientific functions: sin */
+static int l_c_sin(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    T81Complex comp;
+    if (tritjs_sin_complex(A, 5, &comp) != 0) {
+        lua_pushstring(L, "sin error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(&comp.real, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    return 1;
+}
+
+/* Lua binding for scientific functions: cos */
+static int l_c_cos(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    T81Complex comp;
+    if (tritjs_cos_complex(A, 5, &comp) != 0) {
+        lua_pushstring(L, "cos error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(&comp.real, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    return 1;
+}
+
+/* Lua binding for scientific functions: tan */
+static int l_c_tan(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    T81Complex comp;
+    if (tritjs_tan_complex(A, 5, &comp) != 0) {
+        lua_pushstring(L, "tan error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(&comp.real, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(A);
+    return 1;
+}
+
+/* Lua binding for pi */
+static int l_c_pi(lua_State *L) {
+    int len;
+    int *pi;
+    if (tritjs_pi(&len, &pi) != 0) {
+        lua_pushstring(L, "pi error");
+        lua_error(L);
+    }
+    /* Convert the pi digits into a string */
+    char buf[256] = {0};
+    int pos = 0;
+    for (int i = 0; i < len; i++) {
+        buf[pos++] = '0' + pi[i];
+    }
+    buf[pos] = '\0';
+    lua_pushstring(L, buf);
+    free(pi);
+    return 1;
+}
+
+/* Lua binding for conversion: bin2tri */
+static int l_c_bin2tri(lua_State *L) {
+    int num = luaL_checkinteger(L, 1);
+    T81BigInt *tri = NULL;
+    if (binary_to_trit(num, &tri) != 0) {
+        lua_pushstring(L, "Conversion error");
+        lua_error(L);
+    }
+    char *res_str = NULL;
+    t81bigint_to_trit_string(tri, &res_str);
+    lua_pushstring(L, res_str);
+    free(res_str);
+    tritbig_free(tri);
+    return 1;
+}
+
+/* Lua binding for conversion: tri2bin */
+static int l_c_tri2bin(lua_State *L) {
+    const char *s = luaL_checkstring(L, 1);
+    T81BigInt *tri = NULL;
+    if (parse_trit_string(s, &tri) != 0) {
+        lua_pushstring(L, "Conversion error");
+        lua_error(L);
+    }
+    int bin;
+    if (trit_to_binary(tri, &bin) != 0) {
+        lua_pushstring(L, "Conversion error");
+        lua_error(L);
+    }
+    lua_pushinteger(L, bin);
+    tritbig_free(tri);
+    return 1;
+}
+
+/* Lua binding for logical operations: and */
+static int l_c_and(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *res = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_logical_and(A, B, &res) != 0) {
+        lua_pushstring(L, "Logical AND error");
+        lua_error(L);
+    }
+    char *sres = NULL;
+    t81bigint_to_trit_string(res, &sres);
+    lua_pushstring(L, sres);
+    free(sres);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(res);
+    return 1;
+}
+
+/* Similarly, bindings for or, not, and xor can be defined */
+static int l_c_or(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *res = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_logical_or(A, B, &res) != 0) {
+        lua_pushstring(L, "Logical OR error");
+        lua_error(L);
+    }
+    char *sres = NULL;
+    t81bigint_to_trit_string(res, &sres);
+    lua_pushstring(L, sres);
+    free(sres);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(res);
+    return 1;
+}
+
+static int l_c_not(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    T81BigInt *A = NULL, *res = NULL;
+    if (parse_trit_string(a, &A)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_logical_not(A, &res) != 0) {
+        lua_pushstring(L, "Logical NOT error");
+        lua_error(L);
+    }
+    char *sres = NULL;
+    t81bigint_to_trit_string(res, &sres);
+    lua_pushstring(L, sres);
+    free(sres);
+    tritbig_free(A);
+    tritbig_free(res);
+    return 1;
+}
+
+static int l_c_xor(lua_State *L) {
+    const char *a = luaL_checkstring(L, 1);
+    const char *b = luaL_checkstring(L, 2);
+    T81BigInt *A = NULL, *B = NULL, *res = NULL;
+    if (parse_trit_string(a, &A) || parse_trit_string(b, &B)) {
+        lua_pushstring(L, "Invalid input");
+        lua_error(L);
+    }
+    if (tritjs_logical_xor(A, B, &res) != 0) {
+        lua_pushstring(L, "Logical XOR error");
+        lua_error(L);
+    }
+    char *sres = NULL;
+    t81bigint_to_trit_string(res, &sres);
+    lua_pushstring(L, sres);
+    free(sres);
+    tritbig_free(A);
+    tritbig_free(B);
+    tritbig_free(res);
+    return 1;
+}
+
+/* For state management and interface, assume c_save_state and c_load_state 
+   are implemented elsewhere. Here we simply provide bindings. */
+static int l_c_save_state(lua_State *L) {
+    const char *filename = luaL_checkstring(L, 1);
+    if (save_state(filename) != 0) {
+        lua_pushstring(L, "State save error");
+        lua_error(L);
+    }
+    lua_pushstring(L, "State saved successfully");
+    return 1;
+}
+
+static int l_c_load_state(lua_State *L) {
+    const char *filename = luaL_checkstring(L, 1);
+    if (load_state(filename) != 0) {
+        lua_pushstring(L, "State load error");
+        lua_error(L);
+    }
+    lua_pushstring(L, "State loaded successfully");
+    return 1;
+}
+
+/* Interface helpers: e.g., clear history, show help */
+static int l_c_clear(lua_State *L) {
+    clear_history_and_vars();
+    lua_pushstring(L, "History and variables cleared");
+    return 1;
+}
+
+static int l_c_help(lua_State *L) {
+    const char *help_text =
+        "TritJS-CISA Commands via Lua:\n"
+        "  c_add(a, b)       -- Adds two ternary numbers\n"
+        "  c_sub(a, b)       -- Subtracts b from a\n"
+        "  c_mul(a, b)       -- Multiplies two ternary numbers\n"
+        "  c_div(a, b)       -- Divides a by b (returns quotient and remainder)\n"
+        "  c_sqrt(a)         -- Square root of a\n"
+        "  c_log3(a)         -- Base-3 logarithm of a\n"
+        "  c_sin(a)          -- Sine of a\n"
+        "  c_cos(a)          -- Cosine of a\n"
+        "  c_tan(a)          -- Tangent of a\n"
+        "  c_pi()            -- Returns pi in ternary\n"
+        "  c_bin2tri(n)      -- Converts binary number n to ternary\n"
+        "  c_tri2bin(s)      -- Converts ternary string s to binary\n"
+        "  c_and(a, b)       -- Logical AND\n"
+        "  c_or(a, b)        -- Logical OR\n"
+        "  c_not(a)          -- Logical NOT\n"
+        "  c_xor(a, b)       -- Logical XOR\n"
+        "  c_save_state(filename)  -- Saves current state\n"
+        "  c_load_state(filename)  -- Loads state from file\n"
+        "  c_clear()         -- Clears history and variables\n";
+    lua_pushstring(L, help_text);
+    return 1;
+}
+
+/* Register all functions with Lua */
+static void init_lua_bindings(lua_State *L) {
+    lua_register(L, "c_add", l_c_add);
+    lua_register(L, "c_sub", l_c_sub);
+    lua_register(L, "c_mul", l_c_mul);
+    lua_register(L, "c_div", l_c_div);
+    lua_register(L, "c_sqrt", l_c_sqrt);
+    lua_register(L, "c_log3", l_c_log3);
+    lua_register(L, "c_sin", l_c_sin);
+    lua_register(L, "c_cos", l_c_cos);
+    lua_register(L, "c_tan", l_c_tan);
+    lua_register(L, "c_pi", l_c_pi);
+    lua_register(L, "c_bin2tri", l_c_bin2tri);
+    lua_register(L, "c_tri2bin", l_c_tri2bin);
+    lua_register(L, "c_and", l_c_and);
+    lua_register(L, "c_or", l_c_or);
+    lua_register(L, "c_not", l_c_not);
+    lua_register(L, "c_xor", l_c_xor);
+    lua_register(L, "c_save_state", l_c_save_state);
+    lua_register(L, "c_load_state", l_c_load_state);
+    lua_register(L, "c_clear", l_c_clear);
+    lua_register(L, "c_help", l_c_help);
+}
+
+/* Example function to run a Lua script */
+void run_lua_script(const char *script) {
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+    init_lua_bindings(L);
+    if (luaL_dostring(L, script) != LUA_OK) {
+        const char *error = lua_tostring(L, -1);
+        printf("Lua Error: %s\n", error);
+        lua_pop(L, 1);
+    }
+    lua_close(L);
+}
+
+/* --- Integration Test Cases --- */
 void run_integration_tests() {
-    /* Test 1: Crypto Test using OpenSSL AES-256-GCM */
+    /* Crypto Test using OpenSSL AES-256-GCM */
     const char* plaintext = "Test string for encryption";
     unsigned char* ciphertext = NULL;
     size_t ct_len = 0;
@@ -1232,13 +1486,11 @@ void run_integration_tests() {
         printf("Crypto Test: Encryption failed\n");
     }
     
-    /* Test 2: Lua Scripting Test */
-    init_lua();
-    const char* lua_script = "result = test_add(10, 20); print('Lua Test: 10 + 20 =', result)";
+    /* Lua Scripting Test */
+    const char* lua_script = "print('Lua Help:'); print(c_help()); print('c_add result:', c_add('102', '210'))";
     run_lua_script(lua_script);
-    lua_close(L);
     
-    /* Test 3: Intrusion Detection Simulation */
+    /* Intrusion Detection Simulation */
     operation_steps = 150;  /* Simulate heavy activity */
     sleep(6);  /* Allow intrusion monitor to trigger alert */
     if (intrusion_alert) {
@@ -1247,11 +1499,8 @@ void run_integration_tests() {
         printf("Intrusion Detection Test: No alert.\n");
     }
 }
-@-Section17
 
-@* Section 18. Main Function
-Initializes logging, intrusion detection, runs integration tests, starts the ncurses UI, and enters the UI loop.
-@c
+/* --- Main Function --- */
 int main() {
     init_audit_log();
     start_intrusion_monitor();
@@ -1261,4 +1510,3 @@ int main() {
     end_ncurses_interface();
     return 0;
 }
-@-Section18
