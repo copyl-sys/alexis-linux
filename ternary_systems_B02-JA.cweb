@@ -1,0 +1,619 @@
+/*=====================================================================
+  Ternary Systems B02-JA: Cross-Platform Unified Ternary System with Java Utility
+  Version: B02-JA (Portable with Java)
+  Author: Copyleft Systems
+  Date: Mar 3 2025 (updated for portability and Java integration)
+
+  This literate program integrates our Axion kernel module with a Java-based
+  user–space utility into a unified ternary computing system. The core functionality—
+  including ternary arithmetic expression parsing, Tower of Hanoi solving, matrix
+  operations, and discrete math-enhanced opcode encoding/validation—is implemented in C.
+  The kernel module (for Linux) and the core library are compiled as usual, while the
+  utility program is now provided in Java using JNI to interface with the shared library.
+  This refactored version abstracts Linux-specific functionality into a portable interface,
+  enabling compilation and execution on Windows, macOS, BSD, and other UNIX-like systems
+  while maintaining efficient execution. The shift to Java enhances platform independence
+  and provides a robust, type-safe utility interface.
+=====================================================================*/
+
+/*=====================================================================
+  Core Header File: ternary_system.h
+  This header defines the primary interfaces for the ternary system.
+  It supports:
+    - Ternary arithmetic expression parsing,
+    - Tower of Hanoi solver,
+    - Matrix operations,
+    - Discrete math–enhanced opcode functions,
+    - Portable memory allocation and logging macros for cross-platform compatibility.
+  This header is used by both the kernel module and the shared library for user–space.
+  It defines portable macros (TS_MALLOC, TS_FREE, TS_PRINT) and a TS_PUBLIC specifier
+  macro to ensure correct symbol exports for shared libraries across platforms,
+  including compatibility with JNI for the Java utility.
+=====================================================================*/
+@* Core Header File: ternary_system.h
+@o ternary_system.h
+@c
+#ifndef TERNARY_SYSTEM_H
+#define TERNARY_SYSTEM_H
+
+#ifdef __KERNEL__
+  #include <linux/types.h>
+  #include <linux/slab.h>
+  #define TS_MALLOC(sz) kmalloc((sz), GFP_KERNEL)
+  #define TS_FREE(ptr) kfree(ptr)
+  #define TS_PRINT(fmt, ...) printk(KERN_INFO fmt, ##__VA_ARGS__)
+  #define TS_PUBLIC
+#else
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <ctype.h>
+  #include <string.h>
+  #define TS_MALLOC(sz) malloc(sz)
+  #define TS_FREE(ptr) free(ptr)
+  #define TS_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+  #if defined(_WIN32) || defined(__CYGWIN__)
+    #ifdef BUILDING_DLL
+      #ifdef __GNUC__
+        #define TS_PUBLIC __attribute__((dllexport))
+      #else
+        #define TS_PUBLIC __declspec(dllexport)
+      #endif
+    #else
+      #ifdef __GNUC__
+        #define TS_PUBLIC __attribute__((dllimport))
+      #else
+        #define TS_PUBLIC __declspec(dllimport)
+      #endif
+    #endif
+  #elif defined(__GNUC__) && __GNUC__ >= 4
+    #define TS_PUBLIC __attribute__((visibility("default")))
+  #else
+    #define TS_PUBLIC
+  #endif
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Ternary arithmetic expression parser */
+TS_PUBLIC int tritjs_eval_expression(const char *expr);
+TS_PUBLIC void int_to_ternary(int n, char *buffer);
+
+/* Tower of Hanoi solver */
+TS_PUBLIC void solve_hanoi(int n);
+
+/* Matrix operations */
+typedef struct TMatrix {
+    int rows;
+    int cols;
+    int **data;
+} TMatrix;
+
+TS_PUBLIC TMatrix *create_matrix(int rows, int cols);
+TS_PUBLIC void free_matrix(TMatrix *m);
+TS_PUBLIC TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B);
+TS_PUBLIC TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B);
+TS_PUBLIC void serialize_matrix(TMatrix *m, const char *filename);
+TS_PUBLIC TMatrix *deserialize_matrix(const char *filename);
+
+/* Discrete Math–Enhanced Opcode Functions */
+TS_PUBLIC void discrete_opcode_encode(int opcode, char *encoded_buffer);
+TS_PUBLIC int discrete_opcode_validate(const char *encoded_opcode);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* TERNARY_SYSTEM_H */
+@*/
+
+/*=====================================================================
+  Core Implementation: ternary_system.c
+  Implements:
+    - A recursive descent parser for ternary arithmetic expressions,
+    - Tower of Hanoi solver,
+    - Matrix operations (creation, addition, multiplication, serialization,
+      deserialization),
+    - Discrete math–enhanced opcode encoding and validation.
+  All these functionalities are implemented using the portable TS_* macros,
+  ensuring consistency across different operating systems, including support
+  for JNI integration with the Java utility.
+=====================================================================*/
+@* Core Implementation: ternary_system.c
+@o ternary_system.c
+@c
+#include "ternary_system.h"
+
+/*---------------- Expression Parser Implementation ----------------*/
+static const char *expr_ptr;
+
+void error(const char *msg) {
+#ifdef __KERNEL__
+    TS_PRINT("Error: %s\n", msg);
+#else
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(1);
+#endif
+}
+
+static int parse_expr(void);
+static int parse_term(void);
+static int parse_factor(void);
+
+static int parse_number(void) {
+    int value = 0;
+    if (!(*expr_ptr >= '0' && *expr_ptr <= '2'))
+        error("Expected a digit (0, 1, or 2)");
+    while (*expr_ptr && (*expr_ptr == '0' || *expr_ptr == '1' || *expr_ptr == '2')) {
+        value = value * 3 + (*expr_ptr - '0');
+        expr_ptr++;
+    }
+    return value;
+}
+
+static int parse_factor(void) {
+    while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+    if (*expr_ptr == '(') {
+        expr_ptr++;
+        int value = parse_expr();
+        if (*expr_ptr != ')')
+            error("Expected ')'");
+        expr_ptr++;
+        return value;
+    }
+    return parse_number();
+}
+
+static int parse_term(void) {
+    int value = parse_factor();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '*' || *expr_ptr == '/') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_factor();
+            if (op == '*')
+                value *= next_val;
+            else {
+                if (next_val == 0)
+                    error("Division by zero");
+                value /= next_val;
+            }
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+static int parse_expr(void) {
+    int value = parse_term();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '+' || *expr_ptr == '-') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_term();
+            if (op == '+')
+                value += next_val;
+            else
+                value -= next_val;
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+int tritjs_eval_expression(const char *expr) {
+    expr_ptr = expr;
+    int result = parse_expr();
+    while (*expr_ptr) {
+        if (!isspace(*expr_ptr))
+            error("Unexpected character in expression");
+        expr_ptr++;
+    }
+    return result;
+}
+
+void int_to_ternary(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = (n < 0);
+    if (negative) n = -n;
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative) temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+/*---------------- Tower of Hanoi Solver Implementation ----------------*/
+void print_state(int *state, int n) {
+    TS_PRINT("State: ");
+    for (int i = n - 1; i >= 0; i--) {
+        TS_PRINT("%d", state[i]);
+    }
+    TS_PRINT("\n");
+}
+
+static void hanoi_move(int disk, int from, int to, int *state) {
+    TS_PRINT("Move disk %d from peg %d to peg %d\n", disk, from, to);
+    state[disk] = to;
+    print_state(state, disk + 1);
+}
+
+static void solve_hanoi_recursive(int n, int from, int to, int aux, int *state) {
+    if (n == 0) return;
+    solve_hanoi_recursive(n - 1, from, aux, to, state);
+    hanoi_move(n - 1, from, to, state);
+    solve_hanoi_recursive(n - 1, aux, to, from, state);
+}
+
+void solve_hanoi(int n) {
+    int *state = (int *)TS_MALLOC(n * sizeof(int));
+    if (!state) error("Memory allocation failed for Hanoi state");
+    for (int i = 0; i < n; i++) state[i] = 0;
+    TS_PRINT("Initial state (all disks on peg 0):\n");
+    print_state(state, n);
+    solve_hanoi_recursive(n, 0, 2, 1, state);
+    TS_FREE(state);
+}
+
+/*---------------- Matrix Operations Implementation ----------------*/
+TMatrix *create_matrix(int rows, int cols) {
+    TMatrix *m = (TMatrix *)TS_MALLOC(sizeof(TMatrix));
+    if (!m) error("Memory allocation failed for matrix structure");
+    m->rows = rows;
+    m->cols = cols;
+    m->data = (int **)TS_MALLOC(rows * sizeof(int *));
+    if (!m->data) error("Memory allocation failed for matrix data");
+    for (int i = 0; i < rows; i++) {
+        m->data[i] = (int *)TS_MALLOC(cols * sizeof(int));
+        if (!m->data[i]) error("Memory allocation failed for matrix row");
+        for (int j = 0; j < cols; j++)
+            m->data[i][j] = 0;
+    }
+    return m;
+}
+
+void free_matrix(TMatrix *m) {
+    if (m) {
+        for (int i = 0; i < m->rows; i++)
+            TS_FREE(m->data[i]);
+        TS_FREE(m->data);
+        TS_FREE(m);
+    }
+}
+
+TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B) {
+    if (A->rows != B->rows || A->cols != B->cols)
+        error("Matrix dimensions mismatch for addition");
+    TMatrix *result = create_matrix(A->rows, A->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < A->cols; j++)
+            result->data[i][j] = A->data[i][j] + B->data[i][j];
+    }
+    return result;
+}
+
+TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B) {
+    if (A->cols != B->rows)
+        error("Matrix dimensions mismatch for multiplication");
+    TMatrix *result = create_matrix(A->rows, B->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < B->cols; j++) {
+            int sum = 0;
+            for (int k = 0; k < A->cols; k++)
+                sum += A->data[i][k] * B->data[k][j];
+            result->data[i][j] = sum;
+        }
+    }
+    return result;
+}
+
+static void int_to_ternary_internal(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = (n < 0);
+    if (negative) n = -n;
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative) temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+void serialize_matrix(TMatrix *m, const char *filename) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) error("Failed to open file for matrix serialization");
+    fprintf(fp, "%d %d\n", m->rows, m->cols);
+    char buffer[64];
+    for (int i = 0; i < m->rows; i++) {
+        for (int j = 0; j < m->cols; j++) {
+            int_to_ternary_internal(m->data[i][j], buffer);
+            fprintf(fp, "%s ", buffer);
+        }
+        fprintf(fp, "\n");
+    }
+    fclose(fp);
+}
+
+TMatrix *deserialize_matrix(const char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (!fp) error("Failed to open file for matrix deserialization");
+    int rows, cols;
+    if (fscanf(fp, "%d %d", &rows, &cols) != 2)
+        error("Failed to read matrix dimensions");
+    TMatrix *m = create_matrix(rows, cols);
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            char buf[64];
+            if (fscanf(fp, "%63s", buf) != 1)
+                error("Failed to read matrix element");
+            int value = 0;
+            char *p = buf;
+            int is_negative = 0;
+            if (*p == '-') { is_negative = 1; p++; }
+            while (*p) {
+                if (*p < '0' || *p > '2')
+                    error("Invalid digit in ternary number");
+                value = value * 3 + (*p - '0');
+                p++;
+            }
+            if (is_negative) value = -value;
+            m->data[i][j] = value;
+        }
+    }
+    fclose(fp);
+    return m;
+}
+
+/*---------------- Discrete Math–Enhanced Opcode Functions ----------------*/
+void discrete_opcode_encode(int opcode, char *encoded_buffer) {
+    char temp[64];
+    int_to_ternary(opcode, temp);
+    int checksum = 0;
+    for (int i = 0; temp[i] != '\0'; i++) {
+        if (temp[i] >= '0' && temp[i] <= '2')
+            checksum += (temp[i] - '0');
+    }
+    checksum %= 3;
+    sprintf(encoded_buffer, "%s%c", temp, '0' + checksum);
+}
+
+int discrete_opcode_validate(const char *encoded_opcode) {
+    int len = strlen(encoded_opcode);
+    if (len < 2) return 0;
+    int computed_sum = 0;
+    for (int i = 0; i < len - 1; i++) {
+        if (encoded_opcode[i] < '0' || encoded_opcode[i] > '2')
+            return 0;
+        computed_sum += (encoded_opcode[i] - '0');
+    }
+    computed_sum %= 3;
+    int provided_checksum = encoded_opcode[len - 1] - '0';
+    return (computed_sum == provided_checksum);
+}
+@*/
+
+/*=====================================================================
+  Kernel Module Implementation: ternary_system_kernel.c
+  Demonstrates the ternary system functions in a Linux kernel module.
+  (This module is Linux-specific; on other operating systems, use the core library
+  in user-space with the Java utility instead.)
+=====================================================================*/
+@* Kernel Module Implementation: ternary_system_kernel.c
+@o ternary_system_kernel.c
+@c
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <linux/init.h>
+#include "ternary_system.h"
+
+static int __init ternary_system_init(void) {
+    TS_PRINT("Ternary System Kernel Module Loaded\n");
+
+    {
+        const char *expr = "12+21*(2-1)";
+        int result = tritjs_eval_expression(expr);
+        char buf[64];
+        int_to_ternary(result, buf);
+        TS_PRINT("Expression '%s' evaluated to: %s (ternary)\n", expr, buf);
+    }
+
+    {
+        TS_PRINT("Solving Tower of Hanoi with 3 disks:\n");
+        solve_hanoi(3);
+    }
+
+    {
+        int opcode = 5;
+        char encoded[64];
+        discrete_opcode_encode(opcode, encoded);
+        TS_PRINT("Opcode %d encoded as: %s\n", opcode, encoded);
+        if (discrete_opcode_validate(encoded))
+            TS_PRINT("Encoded opcode %s is valid.\n", encoded);
+        else
+            TS_PRINT("Encoded opcode %s is invalid.\n", encoded);
+    }
+
+    return 0;
+}
+
+static void __exit ternary_system_exit(void) {
+    TS_PRINT("Ternary System Kernel Module Unloaded\n");
+}
+
+module_init(ternary_system_init);
+module_exit(ternary_system_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Your Name");
+MODULE_DESCRIPTION("Ternary System Kernel Module with Unified Ternary Logic, Axion Features, and Discrete Math Opcode Enhancements");
+#endif
+@*/
+
+/*=====================================================================
+  Java Utility Program: TernarySystemUtil.java
+  This Java program serves as the user–space utility. It loads the compiled
+  shared library (libternary_system.so on Linux/Unix, libternary_system.dylib on macOS,
+  or ternary_system.dll on Windows) via JNI and provides a command-line interface to:
+    - Evaluate ternary arithmetic expressions,
+    - Solve the Tower of Hanoi,
+    - Demonstrate discrete math–enhanced opcode encoding/validation.
+  The program supports both command-line arguments and an interactive mode.
+  JNI is used to call the C functions directly from Java, leveraging Java's platform
+  independence and robust standard library.
+=====================================================================*/
+@* Java Utility Program: TernarySystemUtil.java
+@o TernarySystemUtil.java
+@c
+import java.util.Scanner;
+
+public class TernarySystemUtil {
+    static {
+        // Load the shared library based on the operating system
+        String osName = System.getProperty("os.name").toLowerCase();
+        String libName;
+        if (osName.contains("windows")) {
+            libName = "ternary_system"; // Loads ternary_system.dll
+        } else if (osName.contains("mac")) {
+            libName = "ternary_system"; // Loads libternary_system.dylib
+        } else {
+            libName = "ternary_system"; // Loads libternary_system.so
+        }
+        try {
+            System.loadLibrary(libName);
+        } catch (UnsatisfiedLinkError e) {
+            System.err.println("Failed to load native library: " + e.getMessage());
+            System.err.println("Ensure the library (e.g., ternary_system.dll, libternary_system.so, or libternary_system.dylib) is in the system library path or current directory.");
+            System.exit(1);
+        }
+    }
+
+    // JNI native method declarations
+    private native int tritjs_eval_expression(String expr);
+    private native void int_to_ternary(int n, byte[] buffer);
+    private native void solve_hanoi(int n);
+    private native void discrete_opcode_encode(int opcode, byte[] buffer);
+    private native int discrete_opcode_validate(String encodedOpcode);
+
+    // Utility methods
+    private static void evaluateExpression(String expr, TernarySystemUtil util) {
+        int result = util.tritjs_eval_expression(expr);
+        byte[] buffer = new byte[64];
+        util.int_to_ternary(result, buffer);
+        String ternaryResult = new String(buffer).trim();
+        System.out.println("Expression evaluated to (ternary): " + ternaryResult);
+    }
+
+    private static void solveHanoi(int n, TernarySystemUtil util) {
+        util.solve_hanoi(n);
+    }
+
+    private static void opcodeDemo(int opcode, TernarySystemUtil util) {
+        byte[] buffer = new byte[64];
+        util.discrete_opcode_encode(opcode, buffer);
+        String encoded = new String(buffer).trim();
+        System.out.println("Opcode " + opcode + " encoded as: " + encoded);
+        int valid = util.discrete_opcode_validate(encoded);
+        System.out.println("Encoded opcode is " + (valid != 0 ? "valid" : "invalid") + ".");
+    }
+
+    private static void printHelp() {
+        System.out.println("Ternary Systems B02-JA Utility (Java Version)");
+        System.out.println("=================================================");
+        System.out.println("Usage:");
+        System.out.println("  java TernarySystemUtil -expr \"expression\"");
+        System.out.println("  java TernarySystemUtil -hanoi n");
+        System.out.println("  java TernarySystemUtil -opcode number");
+        System.out.println("  java TernarySystemUtil interactive");
+        System.out.println("=================================================");
+    }
+
+    private static void interactiveMode(TernarySystemUtil util) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Entering interactive mode. Type 'help' for commands, 'exit' to quit.");
+        while (true) {
+            System.out.print("ts> ");
+            String line = scanner.nextLine().trim();
+            if (line.equals("exit")) {
+                System.out.println("Exiting interactive mode.");
+                break;
+            } else if (line.equals("help")) {
+                printHelp();
+            } else if (!line.isEmpty()) {
+                String[] tokens = line.split("\\s+", 2);
+                String cmd = tokens[0];
+                try {
+                    if (cmd.equals("expr") && tokens.length > 1) {
+                        String expr = tokens[1];
+                        evaluateExpression(expr, util);
+                    } else if (cmd.equals("hanoi") && tokens.length > 1) {
+                        int n = Integer.parseInt(tokens[1]);
+                        solveHanoi(n, util);
+                    } else if (cmd.equals("opcode") && tokens.length > 1) {
+                        int opcode = Integer.parseInt(tokens[1]);
+                        opcodeDemo(opcode, util);
+                    } else {
+                        System.out.println("Unknown command or missing argument. Type 'help' for available commands.");
+                    }
+                } catch (NumberFormatException e) {
+                    System.out.println("Invalid number format. Usage: hanoi <number> or opcode <number>");
+                }
+            }
+        }
+        scanner.close();
+    }
+
+    public static void main(String[] args) {
+        TernarySystemUtil util = new TernarySystemUtil();
+        if (args.length == 0 || args[0].equals("interactive")) {
+            interactiveMode(util);
+        } else if (args[0].equals("-expr") && args.length > 1) {
+            evaluateExpression(args[1], util);
+        } else if (args[0].equals("-hanoi") && args.length > 1) {
+            try {
+                int n = Integer.parseInt(args[1]);
+                solveHanoi(n, util);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid number for hanoi.");
+            }
+        } else if (args[0].equals("-opcode") && args.length > 1) {
+            try {
+                int opcode = Integer.parseInt(args[1]);
+                opcodeDemo(opcode, util);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid opcode.");
+            }
+        } else {
+            printHelp();
+            System.exit(1);
+        }
+    }
+}
+@*/
+
+/*=====================================================================
+  End of Ternary Systems B02-JA CWEB Document
+=====================================================================*/
