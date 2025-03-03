@@ -12,31 +12,48 @@
 #include <linux/debugfs.h>
 #include <linux/workqueue.h>
 #include <linux/cpu.h>
-#include <linux/notifier.h>
-#include <linux/topology.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
-#include <linux/mempolicy.h>
-#include <linux/numa.h>
 #include <linux/random.h>
+#include <linux/jiffies.h>
 #include <linux/binfmts.h>
-#include <asm/io.h>
+#include <linux/sched/task.h>
 
 #define DEVICE_NAME "axion_opt"
-#define AXION_DEFAULT_REGISTER 0x1F  // Default reserved register
-#define AXION_DEBUGFS_DIR "axion_debug"
-#define AXION_DEBUGFS_FILE "cpu_state"
+#define AXION_DEFAULT_REGISTER 0x1F
 #define WORKLOAD_HISTORY_SIZE 10
-#define ANOMALY_THRESHOLD 30
-#define SELF_HEALING_THRESHOLD 50
+#define ANOMALY_THRESHOLD 80
+#define RL_REWARD_GOOD 10
+#define RL_REWARD_BAD -5
+#define SUGGESTION_INTERVAL (24 * 60 * 60 * HZ)
+#define TBIN_MAGIC 0x5442494E
+#define TERNARY_MEM_SIZE 32
 
-// Define ternary states
-#define TERNARY_NEGATIVE -1
-#define TERNARY_ZERO 0
-#define TERNARY_POSITIVE 1
+#define TADD   0x01
+#define TSUB   0x02
+#define TMUL   0x03
+#define TAND   0x04
+#define TOR    0x05
+#define TNOT   0x06
+#define TJMP   0x07
+#define TJZ    0x08
+#define TJNZ   0x09
+#define TLOAD  0x0A
+#define TSTORE 0x0B
+#define THLT   0x0C
 
-// Define Ternary Binary Magic Number
-#define TBIN_MAGIC 0x5442494E  // 'TBIN' magic number for validation
+struct resource_state {
+    int cpu_usage;
+    int ram_usage;
+    int gpu_usage;
+    int action;  // 0: Balanced, 1: CPU-heavy, 2: GPU-heavy
+};
+
+struct rl_model {
+    int q_table[3][3];
+    int last_state;
+    int last_action;
+};
 
 struct tbin_header {
     uint32_t magic;
@@ -45,100 +62,254 @@ struct tbin_header {
     uint32_t data_size;
 };
 
+struct tbin_state {
+    int8_t reg[3];           // 3 trit registers
+    int8_t memory[TERNARY_MEM_SIZE];  // Trit memory
+    uint32_t ip;             // Instruction pointer
+    void *code;              // Loaded code
+    uint32_t code_size;      // Code size
+    int running;             // Execution state
+};
+
+#define AXION_GET_SUGGESTION _IOR('a', 1, char[256])
+#define AXION_SET_REGISTER   _IOW('a', 2, uint64_t)
+#define AXION_GET_REGISTER   _IOR('a', 3, uint64_t)
+#define AXION_SET_ACTION     _IOW('a', 4, int)
+#define AXION_TBIN_LOAD      _IOW('a', 5, struct tbin_header)
+#define AXION_TBIN_STEP      _IO('a',  6)
+#define AXION_TBIN_GET_STATE _IOR('a', 7, struct tbin_state)
+
 static dev_t dev_num;
 static struct cdev axion_cdev;
 static struct class *axion_class;
 static struct device *axion_device;
-static uint64_t axion_register = AXION_DEFAULT_REGISTER;
 static struct task_struct *axion_thread;
 static struct dentry *debugfs_dir, *debugfs_file;
 static struct workqueue_struct *axion_wq;
 static struct work_struct axion_work;
+static uint64_t axion_register = AXION_DEFAULT_REGISTER;
 
-static int workload_history[WORKLOAD_HISTORY_SIZE] = {0};
-static int workload_index = 0;
-static int adaptive_threshold = SELF_HEALING_THRESHOLD;
-static int confidence_metric = 100; // AI confidence in optimization
+static struct resource_state history[WORKLOAD_HISTORY_SIZE] = {{0}};
+static int history_index = 0;
+static struct rl_model rl = {
+    .q_table = {{5, 2, 1}, {3, 5, 2}, {1, 3, 5}},
+    .last_state = 0,
+    .last_action = 0
+};
+static char suggestion[256] = "";
+static unsigned long last_suggestion_time = 0;
+static int tbin_confidence_metric = 100;
+static int tbin_execution_profile = 0;
+static struct tbin_state tbin = {0};
 
-#define AXION_SET_REGISTER _IOW('a', 1, uint64_t)
-#define AXION_GET_REGISTER _IOR('a', 2, uint64_t)
+// Resource monitoring
+static void axion_get_resource_usage(struct resource_state *state) {
+    unsigned long user, nice, system, idle;
+    struct sysinfo si;
+    get_cpu_times(&user, &nice, &system, &idle);  // Placeholder
+    state->cpu_usage = (int)(((user + nice + system) * 100) / (user + nice + system + idle + 1));
+    si_meminfo(&si);
+    state->ram_usage = (int)(((si.totalram - si.freeram) * 100) / si.totalram);
+    state->gpu_usage = (int)(random32() % 100);  // Replace with GPU driver
+}
 
-// Workqueue function for anomaly detection and self-healing
-static void axion_monitor_work(struct work_struct *work) {
-    int current_load = workload_history[workload_index ? workload_index - 1 : WORKLOAD_HISTORY_SIZE - 1];
-    if (current_load > ANOMALY_THRESHOLD) {
-        printk(KERN_WARNING "Axion: Anomaly detected - Load: %d exceeds threshold %d\n", current_load, ANOMALY_THRESHOLD);
-        if (current_load > adaptive_threshold) {
-            printk(KERN_INFO "Axion: Triggering self-healing - adjusting NUMA policy\n");
-            // Simulate self-healing by adjusting NUMA policy (simplified)
-            set_mempolicy(MPOL_DEFAULT, NULL, 0);
-            adaptive_threshold += 10; // Increase threshold to adapt
+static int get_usage_state(int usage) {
+    if (usage <= 33) return 0;
+    if (usage <= 66) return 1;
+    return 2;
+}
+
+static int axion_rl_decide_action(struct resource_state *state) {
+    int cpu_state = get_usage_state(state->cpu_usage);
+    int gpu_state = get_usage_state(state->gpu_usage);
+    int state_idx = cpu_state;
+    int action = 0, max_q = rl.q_table[state_idx][0];
+
+    for (int i = 1; i < 3; i++) {
+        if (rl.q_table[state_idx][i] > max_q) {
+            max_q = rl.q_table[state_idx][i];
+            action = i;
         }
     }
-    queue_work(axion_wq, &axion_work); // Reschedule
+    if ((random32() % 100) < 10)
+        action = random32() % 3;
+    return action;
 }
 
-// Thread for periodic workload monitoring
+static void axion_apply_action(int action) {
+    struct task_struct *task = current;
+    struct sched_param param = { .sched_priority = 0 };
+    switch (action) {
+        case 0:
+            sched_setscheduler(task, SCHED_NORMAL, ¶m);
+            printk(KERN_INFO "Axion: Balanced allocation\n");
+            break;
+        case 1:
+            param.sched_priority = 10;
+            sched_setscheduler(task, SCHED_FIFO, ¶m);
+            printk(KERN_INFO "Axion: Prioritizing CPU\n");
+            break;
+        case 2:
+            printk(KERN_INFO "Axion: Prioritizing GPU\n");  // GPU driver call
+            break;
+    }
+}
+
+static void axion_update_rl(struct resource_state *state, int action, int prev_state) {
+    int reward = (state->cpu_usage > ANOMALY_THRESHOLD && action != 1) ||
+                 (state->gpu_usage > ANOMALY_THRESHOLD && action != 2) ?
+                 RL_REWARD_BAD : RL_REWARD_GOOD;
+    rl.q_table[prev_state][action] += reward;
+    rl.last_state = get_usage_state(state->cpu_usage);
+    rl.last_action = action;
+}
+
+static void axion_suggestion_work(struct work_struct *work) {
+    unsigned long now = jiffies;
+    int cpu_avg = 0, gpu_avg = 0;
+
+    if (time_after(now, last_suggestion_time + SUGGESTION_INTERVAL)) {
+        for (int i = 0; i < WORKLOAD_HISTORY_SIZE; i++) {
+            cpu_avg += history[i].cpu_usage;
+            gpu_avg += history[i].gpu_usage;
+        }
+        cpu_avg /= WORKLOAD_HISTORY_SIZE;
+        gpu_avg /= WORKLOAD_HISTORY_SIZE;
+
+        if (cpu_avg > 70 && time_to_tm(now, 0)->tm_hour >= 20) {
+            snprintf(suggestion, sizeof(suggestion), 
+                     "You compile a lot at night—want to schedule low-priority tasks then?");
+        } else if (gpu_avg > 70) {
+            snprintf(suggestion, sizeof(suggestion), 
+                     "Heavy GPU usage detected—optimize for gaming?");
+        } else {
+            suggestion[0] = '\0';
+        }
+        last_suggestion_time = now;
+    }
+    queue_work(axion_wq, &axion_work);
+}
+
 static int axion_monitor_thread(void *data) {
     while (!kthread_should_stop()) {
-        workload_history[workload_index] = (int)random32() % 100; // Simulate workload
-        workload_index = (workload_index + 1) % WORKLOAD_HISTORY_SIZE;
-        msleep(1000); // Check every second
+        struct resource_state state;
+        axion_get_resource_usage(&state);
+        state.action = axion_rl_decide_action(&state);
+        axion_apply_action(state.action);
+        axion_update_rl(&state, state.action, rl.last_state);
+        history[history_index] = state;
+        history_index = (history_index + 1) % WORKLOAD_HISTORY_SIZE;
+        msleep(1000);
     }
     return 0;
 }
 
-// Device file operations
-static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-    uint64_t value;
-    switch (cmd) {
-        case AXION_SET_REGISTER:
-            if (copy_from_user(&value, (uint64_t __user *)arg, sizeof(value)))
-                return -EFAULT;
-            axion_register = value;
-            printk(KERN_INFO "Axion: Register set to 0x%llx\n", axion_register);
+// Ternary execution step
+static int axion_tbin_step(void) {
+    if (!tbin.running || tbin.ip >= tbin.code_size - 2)
+        return -EINVAL;
+
+    uint8_t *pc = (uint8_t *)tbin.code;
+    uint8_t opcode = pc[tbin.ip];
+    int8_t t1 = (pc[tbin.ip + 1] == 0xFF) ? -1 : pc[tbin.ip + 1];
+    int8_t t2 = (pc[tbin.ip + 2] == 0xFF) ? -1 : pc[tbin.ip + 2];
+
+    switch (opcode) {
+        case TADD:
+            tbin.reg[0] = (tbin.reg[0] + t1 > 1) ? 1 : (tbin.reg[0] + t1 < -1) ? -1 : tbin.reg[0] + t1;
             break;
-        case AXION_GET_REGISTER:
-            if (copy_to_user((uint64_t __user *)arg, &axion_register, sizeof(axion_register)))
+        case TSUB:
+            tbin.reg[0] = (tbin.reg[0] - t1 > 1) ? 1 : (tbin.reg[0] - t1 < -1) ? -1 : tbin.reg[0] - t1;
+            break;
+        case TMUL:
+            tbin.reg[0] = (tbin.reg[0] * t1 > 1) ? 1 : (tbin.reg[0] * t1 < -1) ? -1 : tbin.reg[0] * t1;
+            break;
+        case TAND:
+            tbin.reg[0] = (tbin.reg[0] < t1) ? tbin.reg[0] : t1;
+            break;
+        case TOR:
+            tbin.reg[0] = (tbin.reg[0] > t1) ? tbin.reg[0] : t1;
+            break;
+        case TNOT:
+            tbin.reg[0] = -t1;
+            break;
+        case TJMP:
+            if (t2 != 0) tbin.ip = t1 * 3;
+            break;
+        case TJZ:
+            if (t2 == 0) tbin.ip = t1 * 3;
+            break;
+        case TJNZ:
+            if (t2 != 0) tbin.ip = t1 * 3;
+            break;
+        case TLOAD:
+            if (t1 >= 0 && t1 < TERNARY_MEM_SIZE)
+                tbin.reg[t2] = tbin.memory[t1];
+            else
                 return -EFAULT;
             break;
+        case TSTORE:
+            if (t1 >= 0 && t1 < TERNARY_MEM_SIZE)
+                tbin.memory[t1] = tbin.reg[t2];
+            else
+                return -EFAULT;
+            break;
+        case THLT:
+            tbin.running = 0;
+            printk(KERN_INFO "Axion: TBIN halted\n");
+            return 0;
         default:
+            printk(KERN_ERR "Axion: Unknown opcode 0x%x\n", opcode);
             return -EINVAL;
     }
+    tbin.ip += 3;
     return 0;
 }
 
-static int axion_open(struct inode *inode, struct file *file) {
+static int axion_jit_compile_tbin(struct tbin_header *hdr) {
+    if (tbin.code) {
+        vfree(tbin.code);
+        tbin.code = NULL;
+    }
+
+    int execution_efficiency = (hdr->code_size > 1024) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
+    tbin_execution_profile = (tbin_execution_profile + execution_efficiency) / 2;
+    tbin_confidence_metric = (execution_efficiency != tbin_execution_profile) ?
+                            tbin_confidence_metric - 5 : tbin_confidence_metric + 3;
+    tbin_confidence_metric = (tbin_confidence_metric > 100) ? 100 : 
+                             (tbin_confidence_metric < 50) ? 50 : tbin_confidence_metric;
+
+    tbin.code = vmalloc(hdr->code_size);
+    if (!tbin.code) {
+        printk(KERN_ERR "Axion: Failed to allocate TBIN memory\n");
+        return -ENOMEM;
+    }
+    
+    if (copy_from_user(tbin.code, (void __user *)hdr->entry_point, hdr->code_size)) {
+        printk(KERN_ERR "Axion: Failed to copy TBIN code\n");
+        vfree(tbin.code);
+        tbin.code = NULL;
+        return -EFAULT;
+    }
+    
+    if (hdr->code_size % 3 != 0) {
+        printk(KERN_ERR "Axion: Invalid TBIN code size\n");
+        vfree(tbin.code);
+        tbin.code = NULL;
+        return -EINVAL;
+    }
+
+    tbin.code_size = hdr->code_size;
+    tbin.ip = 0;
+    tbin.running = 1;
+    memset(tbin.reg, 0, sizeof(tbin.reg));
+    memset(tbin.memory, 0, sizeof(tbin.memory));
+
+    printk(KERN_INFO "Axion: TBIN loaded - Profile=%d, Size=%u, Confidence=%d%%\n",
+           tbin_execution_profile, tbin.code_size, tbin_confidence_metric);
     return 0;
 }
 
-static int axion_release(struct inode *inode, struct file *file) {
-    return 0;
-}
-
-static const struct file_operations axion_fops = {
-    .owner = THIS_MODULE,
-    .open = axion_open,
-    .release = axion_release,
-    .unlocked_ioctl = axion_ioctl,
-};
-
-// Telemetry read function
-static ssize_t axion_telemetry_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
-    char telemetry_data[256];
-    int ret;
-    snprintf(telemetry_data, sizeof(telemetry_data), "Execution Profile: %d\nConfidence Metric: %d%%\n", 
-             workload_history[workload_index ? workload_index - 1 : WORKLOAD_HISTORY_SIZE - 1], confidence_metric);
-    ret = simple_read_from_buffer(buffer, len, offset, telemetry_data, strlen(telemetry_data));
-    return ret;
-}
-
-static const struct file_operations axion_telemetry_fops = {
-    .owner = THIS_MODULE,
-    .read = axion_telemetry_read,
-};
-
-// Ternary binary loader
 static int load_tbin_binary(struct linux_binprm *bprm) {
     struct tbin_header *hdr;
     if (bprm->buf[0] != 'T' || bprm->buf[1] != 'B' || bprm->buf[2] != 'I' || bprm->buf[3] != 'N')
@@ -148,9 +319,7 @@ static int load_tbin_binary(struct linux_binprm *bprm) {
     if (hdr->magic != TBIN_MAGIC)
         return -ENOEXEC;
     
-    printk(KERN_INFO "Axion: Loading Ternary Binary at entry point 0x%x, code size: %u bytes\n",
-           hdr->entry_point, hdr->code_size);
-    
+    printk(KERN_INFO "Axion: Loading TBIN at 0x%x, size: %u\n", hdr->entry_point, hdr->code_size);
     return axion_jit_compile_tbin(hdr);
 }
 
@@ -159,123 +328,109 @@ static struct linux_binfmt axion_tbin_format = {
     .load_binary = load_tbin_binary,
 };
 
-static int __init axion_register_tbin(void) {
-    return register_binfmt(&axion_tbin_format);
+static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    uint64_t value;
+    int action;
+    struct tbin_header hdr;
+
+    switch (cmd) {
+        case AXION_GET_SUGGESTION:
+            if (copy_to_user((char __user *)arg, suggestion, sizeof(suggestion)))
+                return -EFAULT;
+            break;
+        case AXION_SET_REGISTER:
+            if (copy_from_user(&value, (uint64_t __user *)arg, sizeof(value)))
+                return -EFAULT;
+            axion_register = value;
+            break;
+        case AXION_GET_REGISTER:
+            if (copy_to_user((uint64_t __user *)arg, &axion_register, sizeof(axion_register)))
+                return -EFAULT;
+            break;
+        case AXION_SET_ACTION:
+            if (copy_from_user(&action, (int __user *)arg, sizeof(action)))
+                return -EFAULT;
+            if (action >= 0 && action <= 2) {
+                axion_apply_action(action);
+                rl.last_action = action;  // Update RL state
+            } else {
+                return -EINVAL;
+            }
+            break;
+        case AXION_TBIN_LOAD:
+            if (copy_from_user(&hdr, (struct tbin_header __user *)arg, sizeof(hdr)))
+                return -EFAULT;
+            return axion_jit_compile_tbin(&hdr);
+        case AXION_TBIN_STEP:
+            return axion_tbin_step();
+        case AXION_TBIN_GET_STATE:
+            if (copy_to_user((struct tbin_state __user *)arg, &tbin, sizeof(tbin)))
+                return -EFAULT;
+            break;
+        default:
+            return -EINVAL;
+    }
+    return 0;
 }
 
-// JIT Compiler for Ternary Binaries
-static int axion_jit_compile_tbin(struct tbin_header *hdr) {
-    static int execution_profile = 0;
-    void *exec_memory = NULL;
-    int ret = 0;
+static int axion_open(struct inode *inode, struct file *file) { return 0; }
+static int axion_release(struct inode *inode, struct file *file) { return 0; }
 
-    printk(KERN_INFO "Axion: JIT compiling Ternary Binary at entry point 0x%x\n", hdr->entry_point);
-    
-    int execution_efficiency = (hdr->code_size > 1024) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
-    execution_profile = (execution_profile + execution_efficiency) / 2;
-    
-    if (execution_efficiency != execution_profile) {
-        confidence_metric -= 5;
-    } else {
-        confidence_metric += 3;
-    }
-    confidence_metric = (confidence_metric > 100) ? 100 : (confidence_metric < 50) ? 50 : confidence_metric;
-    
-    exec_memory = vmalloc(hdr->code_size);
-    if (!exec_memory) {
-        printk(KERN_ERR "Axion: Failed to allocate memory for JIT execution.\n");
-        return -ENOMEM;
-    }
-    
-    if (copy_from_user(exec_memory, (void __user *)hdr->entry_point, hdr->code_size)) {
-        printk(KERN_ERR "Axion: Failed to copy binary code.\n");
-        ret = -EFAULT;
-        goto cleanup;
-    }
-    
-    if (hdr->code_size % 3 == 0) {
-        printk(KERN_INFO "Axion: Applying AI-refined ternary execution heuristics.\n");
-    }
-    
-    printk(KERN_INFO "Axion Telemetry: Execution Profile = %d, Code Size = %u bytes, Entry Point = 0x%x, Confidence Metric = %d%%\n",
-           execution_profile, hdr->code_size, hdr->entry_point, confidence_metric);
+static const struct file_operations axion_fops = {
+    .owner = THIS_MODULE,
+    .open = axion_open,
+    .release = axion_release,
+    .unlocked_ioctl = axion_ioctl,
+};
 
-cleanup:
-    if (exec_memory)
-        vfree(exec_memory);
+static ssize_t axion_telemetry_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
+    char telemetry_data[512];
+    struct resource_state *state = &history[history_index ? history_index - 1 : WORKLOAD_HISTORY_SIZE - 1];
+    int ret;
+    snprintf(telemetry_data, sizeof(telemetry_data), 
+             "CPU: %d%%, RAM: %d%%, GPU: %d%%, Action: %d\n"
+             "TBIN Profile: %d, Confidence: %d%%, Running: %d, IP: %u\nSuggestion: %s\n",
+             state->cpu_usage, state->ram_usage, state->gpu_usage, state->action,
+             tbin_execution_profile, tbin_confidence_metric, tbin.running, tbin.ip, suggestion);
+    ret = simple_read_from_buffer(buffer, len, offset, telemetry_data, strlen(telemetry_data));
     return ret;
 }
+
+static const struct file_operations axion_telemetry_fops = {
+    .owner = THIS_MODULE,
+    .read = axion_telemetry_read,
+};
 
 static int __init axion_init(void) {
     int ret;
 
-    // Allocate device number
     ret = alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME);
-    if (ret < 0) {
-        printk(KERN_ERR "Axion: Failed to allocate device number\n");
-        goto err_chrdev;
-    }
-
-    // Initialize cdev
+    if (ret < 0) goto err_chrdev;
     cdev_init(&axion_cdev, &axion_fops);
     ret = cdev_add(&axion_cdev, dev_num, 1);
-    if (ret < 0) {
-        printk(KERN_ERR "Axion: Failed to add cdev\n");
-        goto err_cdev;
-    }
-
-    // Create device class
+    if (ret < 0) goto err_cdev;
     axion_class = class_create(THIS_MODULE, DEVICE_NAME);
-    if (IS_ERR(axion_class)) {
-        ret = PTR_ERR(axion_class);
-        printk(KERN_ERR "Axion: Failed to create class\n");
-        goto err_class;
-    }
-
-    // Create device
+    if (IS_ERR(axion_class)) { ret = PTR_ERR(axion_class); goto err_class; }
     axion_device = device_create(axion_class, NULL, dev_num, NULL, DEVICE_NAME);
-    if (IS_ERR(axion_device)) {
-        ret = PTR_ERR(axion_device);
-        printk(KERN_ERR "Axion: Failed to create device\n");
-        goto err_device;
-    }
+    if (IS_ERR(axion_device)) { ret = PTR_ERR(axion_device); goto err_device; }
 
-    // Register ternary binary format
-    ret = axion_register_tbin();
-    if (ret) {
-        printk(KERN_ERR "Axion: Failed to register TBIN format\n");
-        goto err_binfmt;
-    }
+    ret = register_binfmt(&axion_tbin_format);
+    if (ret) goto err_binfmt;
 
-    // Create debugfs entries
-    debugfs_dir = debugfs_create_dir(AXION_DEBUGFS_DIR, NULL);
-    if (IS_ERR(debugfs_dir)) {
-        ret = PTR_ERR(debugfs_dir);
-        goto err_debugfs;
-    }
-    debugfs_file = debugfs_create_file(AXION_DEBUGFS_FILE, 0444, debugfs_dir, NULL, &axion_telemetry_fops);
-    if (IS_ERR(debugfs_file)) {
-        ret = PTR_ERR(debugfs_file);
-        goto err_debugfs_file;
-    }
+    debugfs_dir = debugfs_create_dir("axion_debug", NULL);
+    if (IS_ERR(debugfs_dir)) { ret = PTR_ERR(debugfs_dir); goto err_debugfs; }
+    debugfs_file = debugfs_create_file("state", 0444, debugfs_dir, NULL, &axion_telemetry_fops);
+    if (IS_ERR(debugfs_file)) { ret = PTR_ERR(debugfs_file); goto err_debugfs_file; }
 
-    // Initialize workqueue
     axion_wq = create_singlethread_workqueue("axion_wq");
-    if (!axion_wq) {
-        ret = -ENOMEM;
-        goto err_wq;
-    }
-    INIT_WORK(&axion_work, axion_monitor_work);
+    if (!axion_wq) { ret = -ENOMEM; goto err_wq; }
+    INIT_WORK(&axion_work, axion_suggestion_work);
     queue_work(axion_wq, &axion_work);
 
-    // Start monitoring thread
     axion_thread = kthread_run(axion_monitor_thread, NULL, "axion_monitor");
-    if (IS_ERR(axion_thread)) {
-        ret = PTR_ERR(axion_thread);
-        goto err_thread;
-    }
+    if (IS_ERR(axion_thread)) { ret = PTR_ERR(axion_thread); goto err_thread; }
 
-    printk(KERN_INFO "Axion: Module loaded successfully with AI-Predictive NUMA Partitioning, Anomaly Detection, Self-Healing, Adaptive Learning, AI-Based Process Scheduling, Ternary Binary Execution, JIT Compilation with Adaptive AI Learning, Predictive AI Optimization, Self-Correcting AI, and Execution Confidence Metric\n");
+    printk(KERN_INFO "Axion: Loaded with IOCTL-Controlled Resource Management and Ternary Execution\n");
     return 0;
 
 err_thread:
@@ -285,6 +440,7 @@ err_wq:
 err_debugfs_file:
     debugfs_remove(debugfs_dir);
 err_debugfs:
+    unregister_binfmt(&axion_tbin_format);
 err_binfmt:
     device_destroy(axion_class, dev_num);
 err_device:
@@ -304,6 +460,8 @@ static void __exit axion_exit(void) {
         cancel_work_sync(&axion_work);
         destroy_workqueue(axion_wq);
     }
+    if (tbin.code)
+        vfree(tbin.code);
     debugfs_remove(debugfs_file);
     debugfs_remove(debugfs_dir);
     unregister_binfmt(&axion_tbin_format);
@@ -311,7 +469,7 @@ static void __exit axion_exit(void) {
     class_destroy(axion_class);
     cdev_del(&axion_cdev);
     unregister_chrdev_region(dev_num, 1);
-    printk(KERN_INFO "Axion: Module unloaded\n");
+    printk(KERN_INFO "Axion: Unloaded\n");
 }
 
 module_init(axion_init);
@@ -319,4 +477,4 @@ module_exit(axion_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("sansdisk0134@gmail.com");
-MODULE_DESCRIPTION("Axion Kernel Module with AI-Predictive NUMA Partitioning, Anomaly Detection, Self-Healing, Adaptive Learning, AI-Based Process Scheduling, Ternary Binary Execution, JIT Compilation with Adaptive AI Learning, Predictive AI Optimization, Self-Correcting AI, and Execution Confidence Metric");
+MODULE_DESCRIPTION("Axion Kernel Module with IOCTL-Controlled Resource Management and Complete Ternary Instruction Set");
