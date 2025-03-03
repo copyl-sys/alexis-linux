@@ -13,18 +13,18 @@ This Python program has been optimized for:
     state management using OpenSSL (invoked via subprocess) for AES‑256‑CBC encryption.
   - Real-time intrusion detection via a background monitoring thread.
   - Extended scripting and automation using Python's native capabilities.
-  - A responsive curses-based UI with color support and dynamic resizing.
+  - A simple ASCII menu system for saving and opening states.
   - Build automation through an external Makefile/CI‑CD pipeline.
 
 == Features ==
 • Arithmetic: add, sub, mul, div, pow, fact  
 • Scientific: sqrt, log3, sin, cos, tan, pi (via double conversion)  
 • Conversions: bin2tri, tri2bin (optimized conversion routines), balanced/unbalanced ternary parsing  
+• Logical: and, or, not, xor (digit‑wise operations)  
 • State Management: save and load session states (encrypted using OpenSSL AES‑256‑CBC)
 • Security: secure audit logging (with file locking) and intrusion detection  
-• Benchmarking: bench command runs performance tests (via integration tests)  
 • Scripting & Variables: command interpreter with support for state management, history, and interface functions  
-• Interface: enhanced curses-based UI (with color and terminal resize support)  
+• Interface: simple ASCII menu system to manage state files and view history/clear state
 • Build Automation: external Makefile & CI‑CD pipeline (not shown) automate builds, tests, and deployment.
 
 == Usage ==
@@ -45,7 +45,12 @@ GNU General Public License (GPL)
 ***********************************************************************
 """
 
-import os, sys, time, math, threading, curses, json, fcntl, subprocess, tempfile
+import os, sys, time, math, threading, json, fcntl, subprocess, tempfile
+
+try:
+    import resource  # For memory usage on Linux/macOS
+except ImportError:
+    resource = None
 
 # Global configuration and audit logging
 VERSION = "2.0-upgrade-optimized"
@@ -55,7 +60,7 @@ INTRUSION_ALERT = False
 
 # Global command history and variable storage (for demonstration)
 history = []
-variables = [None] * 26  # placeholder for variables A-Z
+variables = [None] * 26  # Placeholder for variables A-Z
 
 def init_audit_log():
     """Initialize the audit log with file locking."""
@@ -77,7 +82,6 @@ def log_error(err_code, context):
 
 # --- Ternary Conversion Functions ---
 def int_to_ternary(n):
-    """Convert an integer to an unbalanced ternary string."""
     if n == 0:
         return "0"
     sign = "-" if n < 0 else ""
@@ -89,7 +93,6 @@ def int_to_ternary(n):
     return sign + "".join(reversed(digits))
 
 def ternary_to_int(s):
-    """Convert an unbalanced ternary string to an integer."""
     try:
         if s[0] == "-":
             return -int(s[1:], 3)
@@ -99,49 +102,33 @@ def ternary_to_int(s):
         raise ValueError("Invalid ternary string") from e
 
 def balanced_to_unbalanced(s):
-    """Convert balanced ternary to unbalanced ternary.
-       Mapping: '-' -> '0', '0' -> '1', '+' -> '2'
-    """
     mapping = {'-': '0', '0': '1', '+': '2'}
     return "".join(mapping.get(ch, '') for ch in s)
 
 def unbalanced_to_balanced(s):
-    """Convert unbalanced ternary to balanced ternary.
-       Mapping: '0' -> '-', '1' -> '0', '2' -> '+'
-    """
     mapping = {'0': '-', '1': '0', '2': '+'}
     return "".join(mapping.get(ch, '') for ch in s)
 
 # --- Arithmetic Operations ---
 def t_add(a_str, b_str):
-    a = ternary_to_int(a_str)
-    b = ternary_to_int(b_str)
-    return int_to_ternary(a + b)
+    return int_to_ternary(ternary_to_int(a_str) + ternary_to_int(b_str))
 
 def t_sub(a_str, b_str):
-    a = ternary_to_int(a_str)
-    b = ternary_to_int(b_str)
-    return int_to_ternary(a - b)
+    return int_to_ternary(ternary_to_int(a_str) - ternary_to_int(b_str))
 
 def t_mul(a_str, b_str):
-    a = ternary_to_int(a_str)
-    b = ternary_to_int(b_str)
-    return int_to_ternary(a * b)
+    return int_to_ternary(ternary_to_int(a_str) * ternary_to_int(b_str))
 
 def t_div(a_str, b_str):
-    a = ternary_to_int(a_str)
-    b = ternary_to_int(b_str)
+    a, b = ternary_to_int(a_str), ternary_to_int(b_str)
     if b == 0:
         log_error(3, "Division by zero")
         raise ZeroDivisionError("Division by zero")
-    q = a // b
-    r = a % b
+    q, r = a // b, a % b
     return int_to_ternary(q), int_to_ternary(r)
 
 def t_pow(a_str, b_str):
-    a = ternary_to_int(a_str)
-    b = ternary_to_int(b_str)
-    return int_to_ternary(pow(a, b))
+    return int_to_ternary(pow(ternary_to_int(a_str), ternary_to_int(b_str)))
 
 def t_fact(a_str):
     a = ternary_to_int(a_str)
@@ -151,8 +138,7 @@ def t_fact(a_str):
     if a > 20:
         log_error(4, "Factorial overflow")
         raise OverflowError("Input too large")
-    result = math.factorial(a)
-    return int_to_ternary(result)
+    return int_to_ternary(math.factorial(a))
 
 # --- Scientific Functions ---
 def t_sqrt(a_str):
@@ -168,20 +154,16 @@ def t_log3(a_str):
     return int_to_ternary(int(math.log(a, 3)))
 
 def t_sin(a_str):
-    a = ternary_to_int(a_str)
-    return int_to_ternary(int(math.sin(a) * 1000))
+    return int_to_ternary(int(math.sin(ternary_to_int(a_str)) * 1000))
 
 def t_cos(a_str):
-    a = ternary_to_int(a_str)
-    return int_to_ternary(int(math.cos(a) * 1000))
+    return int_to_ternary(int(math.cos(ternary_to_int(a_str)) * 1000))
 
 def t_tan(a_str):
-    a = ternary_to_int(a_str)
-    return int_to_ternary(int(math.tan(a) * 1000))
+    return int_to_ternary(int(math.tan(ternary_to_int(a_str)) * 1000))
 
 def t_pi():
-    pi_val = 3.141592653589793
-    return int_to_ternary(int(pi_val * 1000))
+    return int_to_ternary(int(3.141592653589793 * 1000))
 
 # --- Ternary Logical Operations ---
 def t_logic_and(a_str, b_str):
@@ -203,11 +185,10 @@ def t_logic_xor(a_str, b_str):
     return "".join(str((int(x) + int(y)) % 3) for x, y in zip(a_str, b_str))
 
 # --- State Management using OpenSSL (AES-256-CBC) ---
-KEY = b'This_is_a_32byte_key_for_AES256!!!'  # Must be 32 bytes
-NONCE_SIZE = 16  # 16-byte IV for CBC
+KEY = b'This_is_a_32byte_key_for_AES256!!!'
+NONCE_SIZE = 16
 
 def encrypt_data(plaintext):
-    """Encrypt plaintext using OpenSSL AES-256-CBC via subprocess."""
     key_hex = KEY.hex()
     iv = os.urandom(NONCE_SIZE)
     iv_hex = iv.hex()
@@ -230,7 +211,6 @@ def encrypt_data(plaintext):
     return iv + ciphertext
 
 def decrypt_data(data):
-    """Decrypt data using OpenSSL AES-256-CBC via subprocess."""
     iv = data[:NONCE_SIZE]
     ciphertext = data[NONCE_SIZE:]
     key_hex = KEY.hex()
@@ -270,17 +250,27 @@ def load_state(filename):
 def intrusion_monitor():
     global INTRUSION_ALERT, OPERATION_STEPS
     while True:
-        if OPERATION_STEPS > 1000:
-            INTRUSION_ALERT = True
-        else:
-            INTRUSION_ALERT = False
+        INTRUSION_ALERT = OPERATION_STEPS > 1000
         time.sleep(5)
 
 def start_intrusion_monitor():
     thread = threading.Thread(target=intrusion_monitor, daemon=True)
     thread.start()
 
-# --- Curses-based UI ---
+# --- UI Helpers for Status Bar ---
+def update_status_bar(stdscr):
+    mem_usage = "N/A"
+    if resource:
+        try:
+            usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            mem_usage = f"{usage} KB"
+        except Exception:
+            mem_usage = "N/A"
+    status = f"Memory: {mem_usage} | Steps: {OPERATION_STEPS}"
+    stdscr.addstr(0, 0, status)
+    stdscr.clrtoeol()
+    stdscr.refresh()
+
 def init_curses():
     stdscr = curses.initscr()
     curses.noecho()
@@ -294,18 +284,64 @@ def end_curses(stdscr):
     curses.echo()
     curses.endwin()
 
+# --- Curses-based UI with ASCII Menu ---
+def ascii_menu():
+    menu = (
+        "\n============================\n"
+        "TritJS-CISA-Optimized Menu\n"
+        "============================\n"
+        "1. Save State\n"
+        "2. Load State\n"
+        "3. Show History\n"
+        "4. Clear History/Variables\n"
+        "5. Help\n"
+        "6. Exit Menu\n"
+        "============================\n"
+        "Enter choice (1-6): "
+    )
+    return menu
+
+def process_menu_choice(choice):
+    if choice == "1":
+        filename = input("Enter filename to save state: ")
+        state = {"history": history, "variables": [v for v in variables if v]}
+        print(save_state(filename, state))
+    elif choice == "2":
+        filename = input("Enter filename to load state: ")
+        state = load_state(filename)
+        print("State loaded:", state)
+    elif choice == "3":
+        print("Command History:")
+        for cmd_entry in history:
+            print(cmd_entry)
+    elif choice == "4":
+        print(c_clear())
+    elif choice == "5":
+        print(c_help())
+    elif choice == "6":
+        print("Exiting menu.")
+    else:
+        print("Invalid choice.")
+
 def curses_ui():
     stdscr = init_curses()
     try:
-        stdscr.clear()
-        stdscr.addstr(0, 0, f"TritJS-CISA-Optimized v{VERSION} - Press 'q' to quit")
-        stdscr.addstr(1, 0, "Enter command:")
-        stdscr.refresh()
         while True:
+            update_status_bar(stdscr)
+            stdscr.addstr(1, 0, "Enter command (or type 'menu' for options, 'q' to quit):")
+            stdscr.clrtoeol()
+            stdscr.refresh()
             cmd = stdscr.getstr(2, 0, 80).decode('utf-8').strip()
             if cmd.lower() == "q":
                 break
-            # Append command to history
+            if cmd.lower() == "menu":
+                stdscr.clear()
+                stdscr.addstr(0, 0, ascii_menu())
+                stdscr.refresh()
+                choice = stdscr.getstr(7, 0, 2).decode('utf-8').strip()
+                process_menu_choice(choice)
+                stdscr.clear()
+                continue
             history.append(cmd)
             try:
                 parts = cmd.split()
@@ -363,29 +399,6 @@ def curses_ui():
                 elif parts[0] == "xor":
                     result = t_logic_xor(parts[1], parts[2])
                     stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "save":
-                    state = {"history": history, "variables": [v for v in variables if v]}
-                    msg = save_state(parts[1], state)
-                    stdscr.addstr(4, 0, f"{msg}\n")
-                elif parts[0] == "load":
-                    state = load_state(parts[1])
-                    stdscr.addstr(4, 0, f"State loaded: {state}\n")
-                elif parts[0] == "clear":
-                    history.clear()
-                    for i in range(len(variables)):
-                        variables[i] = None
-                    stdscr.addstr(4, 0, "History and variables cleared\n")
-                elif parts[0] == "history":
-                    stdscr.addstr(4, 0, "Command History:\n" + "\n".join(history) + "\n")
-                elif parts[0] == "help":
-                    help_text = (
-                        "Commands: add, sub, mul, div, pow, fact, sqrt, log3, sin, cos, tan, pi,\n"
-                        "          bin2tri, tri2bin, and, or, not, xor, save, load, clear, history, runlua, help\n"
-                    )
-                    stdscr.addstr(6, 0, help_text)
-                elif parts[0] == "runlua":
-                    script = " ".join(parts[1:])
-                    run_lua_script(script)
                 else:
                     stdscr.addstr(4, 0, f"Unknown command: {cmd}\n")
             except Exception as e:
@@ -397,11 +410,6 @@ def curses_ui():
 
 # --- Lua Integration ---
 def run_lua_script(script):
-    """
-    Simulate running a Lua script.
-    In production, integrate Lua using a library like 'lupa'.
-    Here we use Python's exec() to simulate script execution.
-    """
     try:
         exec(script, globals())
     except Exception as e:
@@ -467,17 +475,14 @@ c_xor = t_logic_xor
 
 # --- Integration Test Cases ---
 def run_integration_tests():
-    # Crypto Test using OpenSSL via subprocess
     plaintext = "Test string for encryption"
     enc = encrypt_data(plaintext)
     dec = decrypt_data(enc)
     print("Crypto Test:", dec)
     
-    # Lua Scripting Test (simulated)
     lua_script = "print('Lua Test: c_add(102, 210) =', c_add('102', '210'))"
     run_lua_script(lua_script)
     
-    # Intrusion Detection Simulation
     global OPERATION_STEPS, INTRUSION_ALERT
     OPERATION_STEPS = 150
     time.sleep(6)
@@ -491,18 +496,24 @@ def main():
     print(f"TritJS-CISA-Optimized v{VERSION}")
     start_intrusion_monitor()
     run_integration_tests()
-    print("Starting interactive mode (type 'exit' to quit):")
+    print("Starting interactive mode (type 'menu' for options, 'exit' to quit):")
     while True:
         try:
             cmd = input("> ")
             if cmd.lower() in ["exit", "quit"]:
                 break
-            history.append(cmd)  # Store command in history
+            if cmd.lower() == "menu":
+                print(ascii_menu())
+                choice = input("Choice: ").strip()
+                process_menu_choice(choice)
+                continue
+            history.append(cmd)
             global OPERATION_STEPS
             OPERATION_STEPS += 1
             parts = cmd.split()
             if not parts:
                 continue
+            # Process arithmetic, scientific, logical commands based on keyword
             if parts[0] == "add":
                 print("Result:", t_add(parts[1], parts[2]))
             elif parts[0] == "sub":
@@ -564,6 +575,5 @@ def main():
             
 if __name__ == "__main__":
     # Choose between launching the curses UI or a simple CLI.
-    # Uncomment one of the following lines:
-    # curses_ui()  # Launch curses-based UI
-    main()         # Launch simple command-line interface
+    # For this refactored version, we use the CLI with an ASCII menu.
+    main()
