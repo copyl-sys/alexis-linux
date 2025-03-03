@@ -199,9 +199,8 @@ def t_logic_xor(a_str, b_str):
     return "".join(str((int(x) + int(y)) % 3) for x, y in zip(a_str, b_str))
 
 # --- State Management using OpenSSL (AES-256-CBC) ---
-# Note: This version uses AES-256-CBC as a substitute since OpenSSL enc for GCM may be problematic.
-KEY = b'This_is_a_32byte_key_for_AES256!!!'  # 32-byte key
-NONCE_SIZE = 16  # For CBC, we use a 16-byte IV
+KEY = b'This_is_a_32byte_key_for_AES256!!!'  # Must be 32 bytes
+NONCE_SIZE = 16  # 16-byte IV for CBC
 
 def encrypt_data(plaintext):
     """Encrypt plaintext using OpenSSL AES-256-CBC via subprocess."""
@@ -359,7 +358,7 @@ def curses_ui():
                     result = t_logic_xor(parts[1], parts[2])
                     stdscr.addstr(4, 0, f"Result: {result}\n")
                 elif parts[0] == "save":
-                    state = {"history": [], "variables": []}  # For demo purposes
+                    state = {"history": [], "variables": []}
                     msg = save_state(parts[1], state)
                     stdscr.addstr(4, 0, f"{msg}\n")
                 elif parts[0] == "load":
@@ -389,8 +388,8 @@ def curses_ui():
 def run_lua_script(script):
     """
     Simulate running a Lua script.
-    In a production environment, you might integrate Lua using a library like 'lupa'.
-    Here, we use Python's exec() to simulate script execution.
+    In production, integrate Lua using a library like 'lupa'.
+    Here we use Python's exec() to simulate script execution.
     """
     try:
         exec(script, globals())
@@ -467,4 +466,65 @@ def main():
                 break
             global OPERATION_STEPS
             OPERATION_STEPS += 1
-            par
+            parts = cmd.split()
+            if not parts:
+                continue
+            if parts[0] == "add":
+                print("Result:", t_add(parts[1], parts[2]))
+            elif parts[0] == "sub":
+                print("Result:", t_sub(parts[1], parts[2]))
+            elif parts[0] == "mul":
+                print("Result:", t_mul(parts[1], parts[2]))
+            elif parts[0] == "div":
+                q, r = t_div(parts[1], parts[2])
+                print("Quotient:", q, "Remainder:", r)
+            elif parts[0] == "pow":
+                print("Result:", t_pow(parts[1], parts[2]))
+            elif parts[0] == "fact":
+                print("Result:", t_fact(parts[1]))
+            elif parts[0] == "sqrt":
+                print("Result:", t_sqrt(parts[1]))
+            elif parts[0] == "log3":
+                print("Result:", t_log3(parts[1]))
+            elif parts[0] == "sin":
+                print("Result:", t_sin(parts[1]))
+            elif parts[0] == "cos":
+                print("Result:", t_cos(parts[1]))
+            elif parts[0] == "tan":
+                print("Result:", t_tan(parts[1]))
+            elif parts[0] == "pi":
+                print("pi:", t_pi())
+            elif parts[0] == "bin2tri":
+                print("Result:", int_to_ternary(int(parts[1])))
+            elif parts[0] == "tri2bin":
+                print("Result:", ternary_to_int(parts[1]))
+            elif parts[0] == "and":
+                print("Result:", t_logic_and(parts[1], parts[2]))
+            elif parts[0] == "or":
+                print("Result:", t_logic_or(parts[1], parts[2]))
+            elif parts[0] == "not":
+                print("Result:", t_logic_not(parts[1]))
+            elif parts[0] == "xor":
+                print("Result:", t_logic_xor(parts[1], parts[2]))
+            elif parts[0] == "save":
+                state = {"history": [], "variables": []}  # For demo purposes
+                print(save_state(parts[1], state))
+            elif parts[0] == "load":
+                state = load_state(parts[1])
+                print("State loaded:", state)
+            elif parts[0] == "clear":
+                print(c_clear())
+            elif parts[0] == "help":
+                print(c_help())
+            elif parts[0] == "runlua":
+                script = " ".join(parts[1:])
+                run_lua_script(script)
+            else:
+                print("Unknown command")
+        except Exception as e:
+            print("Error:", e)
+            
+if __name__ == "__main__":
+    # Uncomment one of the following lines to choose the UI:
+    # curses_ui()  # Launch curses-based UI
+    main()         # Launch simple command-line interface
