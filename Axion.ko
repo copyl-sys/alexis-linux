@@ -48,6 +48,7 @@ struct tbin_header {
 static dev_t dev_num;
 static struct cdev axion_cdev;
 static struct class *axion_class;
+static struct device *axion_device;
 static uint64_t axion_register = AXION_DEFAULT_REGISTER;
 static struct task_struct *axion_thread;
 static struct dentry *debugfs_dir, *debugfs_file;
@@ -62,11 +63,72 @@ static int confidence_metric = 100; // AI confidence in optimization
 #define AXION_SET_REGISTER _IOW('a', 1, uint64_t)
 #define AXION_GET_REGISTER _IOR('a', 2, uint64_t)
 
-// Function to expose telemetry data via user-space API
+// Workqueue function for anomaly detection and self-healing
+static void axion_monitor_work(struct work_struct *work) {
+    int current_load = workload_history[workload_index ? workload_index - 1 : WORKLOAD_HISTORY_SIZE - 1];
+    if (current_load > ANOMALY_THRESHOLD) {
+        printk(KERN_WARNING "Axion: Anomaly detected - Load: %d exceeds threshold %d\n", current_load, ANOMALY_THRESHOLD);
+        if (current_load > adaptive_threshold) {
+            printk(KERN_INFO "Axion: Triggering self-healing - adjusting NUMA policy\n");
+            // Simulate self-healing by adjusting NUMA policy (simplified)
+            set_mempolicy(MPOL_DEFAULT, NULL, 0);
+            adaptive_threshold += 10; // Increase threshold to adapt
+        }
+    }
+    queue_work(axion_wq, &axion_work); // Reschedule
+}
+
+// Thread for periodic workload monitoring
+static int axion_monitor_thread(void *data) {
+    while (!kthread_should_stop()) {
+        workload_history[workload_index] = (int)random32() % 100; // Simulate workload
+        workload_index = (workload_index + 1) % WORKLOAD_HISTORY_SIZE;
+        msleep(1000); // Check every second
+    }
+    return 0;
+}
+
+// Device file operations
+static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    uint64_t value;
+    switch (cmd) {
+        case AXION_SET_REGISTER:
+            if (copy_from_user(&value, (uint64_t __user *)arg, sizeof(value)))
+                return -EFAULT;
+            axion_register = value;
+            printk(KERN_INFO "Axion: Register set to 0x%llx\n", axion_register);
+            break;
+        case AXION_GET_REGISTER:
+            if (copy_to_user((uint64_t __user *)arg, &axion_register, sizeof(axion_register)))
+                return -EFAULT;
+            break;
+        default:
+            return -EINVAL;
+    }
+    return 0;
+}
+
+static int axion_open(struct inode *inode, struct file *file) {
+    return 0;
+}
+
+static int axion_release(struct inode *inode, struct file *file) {
+    return 0;
+}
+
+static const struct file_operations axion_fops = {
+    .owner = THIS_MODULE,
+    .open = axion_open,
+    .release = axion_release,
+    .unlocked_ioctl = axion_ioctl,
+};
+
+// Telemetry read function
 static ssize_t axion_telemetry_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
     char telemetry_data[256];
     int ret;
-    snprintf(telemetry_data, sizeof(telemetry_data), "Execution Profile: %d\nConfidence Metric: %d%%\n", workload_history[workload_index - 1], confidence_metric);
+    snprintf(telemetry_data, sizeof(telemetry_data), "Execution Profile: %d\nConfidence Metric: %d%%\n", 
+             workload_history[workload_index ? workload_index - 1 : WORKLOAD_HISTORY_SIZE - 1], confidence_metric);
     ret = simple_read_from_buffer(buffer, len, offset, telemetry_data, strlen(telemetry_data));
     return ret;
 }
@@ -76,7 +138,7 @@ static const struct file_operations axion_telemetry_fops = {
     .read = axion_telemetry_read,
 };
 
-// Function to load ternary binary files
+// Ternary binary loader
 static int load_tbin_binary(struct linux_binprm *bprm) {
     struct tbin_header *hdr;
     if (bprm->buf[0] != 'T' || bprm->buf[1] != 'B' || bprm->buf[2] != 'I' || bprm->buf[3] != 'N')
@@ -101,35 +163,35 @@ static int __init axion_register_tbin(void) {
     return register_binfmt(&axion_tbin_format);
 }
 
-// Just-In-Time (JIT) Compiler for Ternary Binaries with Self-Correcting AI and Confidence Metric
+// JIT Compiler for Ternary Binaries
 static int axion_jit_compile_tbin(struct tbin_header *hdr) {
     static int execution_profile = 0;
+    void *exec_memory = NULL;
+    int ret = 0;
+
     printk(KERN_INFO "Axion: JIT compiling Ternary Binary at entry point 0x%x\n", hdr->entry_point);
     
-    // AI-driven profiling, adaptive learning, and predictive execution
     int execution_efficiency = (hdr->code_size > 1024) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
-    execution_profile = (execution_profile + execution_efficiency) / 2; // Adaptive refinement
+    execution_profile = (execution_profile + execution_efficiency) / 2;
     
-    // Self-correcting AI confidence metric
     if (execution_efficiency != execution_profile) {
-        confidence_metric -= 5; // Reduce confidence if prediction is incorrect
+        confidence_metric -= 5;
     } else {
-        confidence_metric += 3; // Increase confidence if prediction was accurate
+        confidence_metric += 3;
     }
-    confidence_metric = (confidence_metric > 100) ? 100 : (confidence_metric < 50) ? 50 : confidence_metric; // Keep confidence within range
+    confidence_metric = (confidence_metric > 100) ? 100 : (confidence_metric < 50) ? 50 : confidence_metric;
     
-    if (execution_profile > 0) {
-        printk(KERN_INFO "Axion: AI-Optimized for high-performance execution. Confidence: %d%%\n", confidence_metric);
-    } else {
-        printk(KERN_INFO "Axion: AI-Optimized for low-power execution. Confidence: %d%%\n", confidence_metric);
-    }
-    
-    void *exec_memory = vmalloc(hdr->code_size);
+    exec_memory = vmalloc(hdr->code_size);
     if (!exec_memory) {
         printk(KERN_ERR "Axion: Failed to allocate memory for JIT execution.\n");
         return -ENOMEM;
     }
-    memcpy(exec_memory, (void *)hdr->entry_point, hdr->code_size);
+    
+    if (copy_from_user(exec_memory, (void __user *)hdr->entry_point, hdr->code_size)) {
+        printk(KERN_ERR "Axion: Failed to copy binary code.\n");
+        ret = -EFAULT;
+        goto cleanup;
+    }
     
     if (hdr->code_size % 3 == 0) {
         printk(KERN_INFO "Axion: Applying AI-refined ternary execution heuristics.\n");
@@ -137,20 +199,124 @@ static int axion_jit_compile_tbin(struct tbin_header *hdr) {
     
     printk(KERN_INFO "Axion Telemetry: Execution Profile = %d, Code Size = %u bytes, Entry Point = 0x%x, Confidence Metric = %d%%\n",
            execution_profile, hdr->code_size, hdr->entry_point, confidence_metric);
-    
-    return 0;
+
+cleanup:
+    if (exec_memory)
+        vfree(exec_memory);
+    return ret;
 }
 
 static int __init axion_init(void) {
-    axion_register_tbin();
-    debugfs_create_file("axion_telemetry", 0444, NULL, NULL, &axion_telemetry_fops);
+    int ret;
+
+    // Allocate device number
+    ret = alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME);
+    if (ret < 0) {
+        printk(KERN_ERR "Axion: Failed to allocate device number\n");
+        goto err_chrdev;
+    }
+
+    // Initialize cdev
+    cdev_init(&axion_cdev, &axion_fops);
+    ret = cdev_add(&axion_cdev, dev_num, 1);
+    if (ret < 0) {
+        printk(KERN_ERR "Axion: Failed to add cdev\n");
+        goto err_cdev;
+    }
+
+    // Create device class
+    axion_class = class_create(THIS_MODULE, DEVICE_NAME);
+    if (IS_ERR(axion_class)) {
+        ret = PTR_ERR(axion_class);
+        printk(KERN_ERR "Axion: Failed to create class\n");
+        goto err_class;
+    }
+
+    // Create device
+    axion_device = device_create(axion_class, NULL, dev_num, NULL, DEVICE_NAME);
+    if (IS_ERR(axion_device)) {
+        ret = PTR_ERR(axion_device);
+        printk(KERN_ERR "Axion: Failed to create device\n");
+        goto err_device;
+    }
+
+    // Register ternary binary format
+    ret = axion_register_tbin();
+    if (ret) {
+        printk(KERN_ERR "Axion: Failed to register TBIN format\n");
+        goto err_binfmt;
+    }
+
+    // Create debugfs entries
+    debugfs_dir = debugfs_create_dir(AXION_DEBUGFS_DIR, NULL);
+    if (IS_ERR(debugfs_dir)) {
+        ret = PTR_ERR(debugfs_dir);
+        goto err_debugfs;
+    }
+    debugfs_file = debugfs_create_file(AXION_DEBUGFS_FILE, 0444, debugfs_dir, NULL, &axion_telemetry_fops);
+    if (IS_ERR(debugfs_file)) {
+        ret = PTR_ERR(debugfs_file);
+        goto err_debugfs_file;
+    }
+
+    // Initialize workqueue
+    axion_wq = create_singlethread_workqueue("axion_wq");
+    if (!axion_wq) {
+        ret = -ENOMEM;
+        goto err_wq;
+    }
+    INIT_WORK(&axion_work, axion_monitor_work);
+    queue_work(axion_wq, &axion_work);
+
+    // Start monitoring thread
+    axion_thread = kthread_run(axion_monitor_thread, NULL, "axion_monitor");
+    if (IS_ERR(axion_thread)) {
+        ret = PTR_ERR(axion_thread);
+        goto err_thread;
+    }
+
     printk(KERN_INFO "Axion: Module loaded successfully with AI-Predictive NUMA Partitioning, Anomaly Detection, Self-Healing, Adaptive Learning, AI-Based Process Scheduling, Ternary Binary Execution, JIT Compilation with Adaptive AI Learning, Predictive AI Optimization, Self-Correcting AI, and Execution Confidence Metric\n");
     return 0;
+
+err_thread:
+    destroy_workqueue(axion_wq);
+err_wq:
+    debugfs_remove(debugfs_file);
+err_debugfs_file:
+    debugfs_remove(debugfs_dir);
+err_debugfs:
+err_binfmt:
+    device_destroy(axion_class, dev_num);
+err_device:
+    class_destroy(axion_class);
+err_class:
+    cdev_del(&axion_cdev);
+err_cdev:
+    unregister_chrdev_region(dev_num, 1);
+err_chrdev:
+    return ret;
+}
+
+static void __exit axion_exit(void) {
+    if (axion_thread)
+        kthread_stop(axion_thread);
+    if (axion_wq) {
+        cancel_work_sync(&axion_work);
+        destroy_workqueue(axion_wq);
+    }
+    debugfs_remove(debugfs_file);
+    debugfs_remove(debugfs_dir);
+    unregister_binfmt(&axion_tbin_format);
+    device_destroy(axion_class, dev_num);
+    class_destroy(axion_class);
+    cdev_del(&axion_cdev);
+    unregister_chrdev_region(dev_num, 1);
+    printk(KERN_INFO "Axion: Module unloaded\n");
 }
 
 module_init(axion_init);
 module_exit(axion_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("User");
+MODULE_AUTHOR("sansdisk0134@gmail.com");
 MODULE_DESCRIPTION("Axion Kernel Module with AI-Predictive NUMA Partitioning, Anomaly Detection, Self-Healing, Adaptive Learning, AI-Based Process Scheduling, Ternary Binary Execution, JIT Compilation with Adaptive AI Learning, Predictive AI Optimization, Self-Correcting AI, and Execution Confidence Metric");
