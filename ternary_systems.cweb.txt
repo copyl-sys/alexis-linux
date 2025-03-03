@@ -1,0 +1,575 @@
+/*=====================================================================
+  Ternary Systems B01_py: Unified Kernel Module and Python Utility
+  Version: B01-PY
+  Author: Copyleft Systems
+  Date: [Insert Date]
+
+  This literate program integrates our Axion kernel module with a Python-based
+  user–space utility into a unified ternary computing system. The core functionality—
+  including ternary arithmetic expression parsing, Tower of Hanoi solving, matrix
+  operations, and discrete math-enhanced opcode encoding/validation—is implemented in C.
+  The kernel module (for Linux) and the core library are compiled as usual, while the
+  utility program is provided in Python using ctypes to interface with the shared library.
+=====================================================================*/
+
+/*=====================================================================
+  Core Header File: ternary_system.h
+  This header defines the primary interfaces for the ternary system.
+  It supports:
+    - Ternary arithmetic expression parsing,
+    - Tower of Hanoi solver,
+    - Matrix operations,
+    - Discrete math–enhanced opcode functions.
+  This header is used by both the kernel module and the shared library for user–space.
+=====================================================================*/
+@* Core Header File: ternary_system.h
+@o ternary_system.h
+@c
+#ifndef TERNARY_SYSTEM_H
+#define TERNARY_SYSTEM_H
+
+#ifdef __KERNEL__
+  #include <linux/types.h>
+  #include <linux/slab.h>
+  #define TS_MALLOC(sz) kmalloc((sz), GFP_KERNEL)
+  #define TS_FREE(ptr) kfree(ptr)
+  #define TS_PRINT(fmt, ...) printk(KERN_INFO fmt, ##__VA_ARGS__)
+#else
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <ctype.h>
+  #include <string.h>
+  #define TS_MALLOC(sz) malloc(sz)
+  #define TS_FREE(ptr) free(ptr)
+  #define TS_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Ternary arithmetic expression parser */
+int tritjs_eval_expression(const char *expr);
+void int_to_ternary(int n, char *buffer);
+
+/* Tower of Hanoi solver */
+void solve_hanoi(int n);
+
+/* Matrix operations */
+typedef struct TMatrix {
+    int rows;
+    int cols;
+    int **data;
+} TMatrix;
+
+TMatrix *create_matrix(int rows, int cols);
+void free_matrix(TMatrix *m);
+TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B);
+TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B);
+void serialize_matrix(TMatrix *m, const char *filename);
+TMatrix *deserialize_matrix(const char *filename);
+
+/* Discrete Math–Enhanced Opcode Functions */
+void discrete_opcode_encode(int opcode, char *encoded_buffer);
+int discrete_opcode_validate(const char *encoded_opcode);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* TERNARY_SYSTEM_H */
+@*/
+
+/*=====================================================================
+  Core Implementation: ternary_system.c
+  Implements:
+    - A recursive descent parser for ternary arithmetic expressions,
+    - Tower of Hanoi solver,
+    - Matrix operations (creation, addition, multiplication, serialization,
+      deserialization),
+    - Discrete math–enhanced opcode encoding and validation.
+=====================================================================*/
+@* Core Implementation: ternary_system.c
+@o ternary_system.c
+@c
+#include "ternary_system.h"
+
+/*---------------- Expression Parser Implementation ----------------*/
+static const char *expr_ptr;
+
+void error(const char *msg) {
+#ifdef __KERNEL__
+    TS_PRINT("Error: %s\n", msg);
+#else
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(1);
+#endif
+}
+
+static int parse_expr(void);
+static int parse_term(void);
+static int parse_factor(void);
+
+static int parse_number(void) {
+    int value = 0;
+    if (!(*expr_ptr >= '0' && *expr_ptr <= '2'))
+        error("Expected a digit (0, 1, or 2)");
+    while (*expr_ptr && (*expr_ptr == '0' || *expr_ptr == '1' || *expr_ptr == '2')) {
+        value = value * 3 + (*expr_ptr - '0');
+        expr_ptr++;
+    }
+    return value;
+}
+
+static int parse_factor(void) {
+    while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+    if (*expr_ptr == '(') {
+        expr_ptr++;
+        int value = parse_expr();
+        if (*expr_ptr != ')')
+            error("Expected ')'");
+        expr_ptr++;
+        return value;
+    }
+    return parse_number();
+}
+
+static int parse_term(void) {
+    int value = parse_factor();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '*' || *expr_ptr == '/') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_factor();
+            if (op == '*')
+                value *= next_val;
+            else {
+                if (next_val == 0)
+                    error("Division by zero");
+                value /= next_val;
+            }
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+static int parse_expr(void) {
+    int value = parse_term();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '+' || *expr_ptr == '-') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_term();
+            if (op == '+')
+                value += next_val;
+            else
+                value -= next_val;
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+int tritjs_eval_expression(const char *expr) {
+    expr_ptr = expr;
+    int result = parse_expr();
+    while (*expr_ptr) {
+        if (!isspace(*expr_ptr))
+            error("Unexpected character in expression");
+        expr_ptr++;
+    }
+    return result;
+}
+
+void int_to_ternary(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = (n < 0);
+    if (negative) n = -n;
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative) temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+/*---------------- Tower of Hanoi Solver Implementation ----------------*/
+void print_state(int *state, int n) {
+    TS_PRINT("State: ");
+    for (int i = n - 1; i >= 0; i--) {
+        TS_PRINT("%d", state[i]);
+    }
+    TS_PRINT("\n");
+}
+
+static void hanoi_move(int disk, int from, int to, int *state) {
+    TS_PRINT("Move disk %d from peg %d to peg %d\n", disk, from, to);
+    state[disk] = to;
+    print_state(state, disk + 1);
+}
+
+static void solve_hanoi_recursive(int n, int from, int to, int aux, int *state) {
+    if (n == 0) return;
+    solve_hanoi_recursive(n - 1, from, aux, to, state);
+    hanoi_move(n - 1, from, to, state);
+    solve_hanoi_recursive(n - 1, aux, to, from, state);
+}
+
+void solve_hanoi(int n) {
+    int *state = (int *)TS_MALLOC(n * sizeof(int));
+    if (!state) error("Memory allocation failed for Hanoi state");
+    for (int i = 0; i < n; i++) state[i] = 0;
+    TS_PRINT("Initial state (all disks on peg 0):\n");
+    print_state(state, n);
+    solve_hanoi_recursive(n, 0, 2, 1, state);
+    TS_FREE(state);
+}
+
+/*---------------- Matrix Operations Implementation ----------------*/
+TMatrix *create_matrix(int rows, int cols) {
+    TMatrix *m = (TMatrix *)TS_MALLOC(sizeof(TMatrix));
+    if (!m) error("Memory allocation failed for matrix structure");
+    m->rows = rows;
+    m->cols = cols;
+    m->data = (int **)TS_MALLOC(rows * sizeof(int *));
+    if (!m->data) error("Memory allocation failed for matrix data");
+    for (int i = 0; i < rows; i++) {
+        m->data[i] = (int *)TS_MALLOC(cols * sizeof(int));
+        if (!m->data[i]) error("Memory allocation failed for matrix row");
+        for (int j = 0; j < cols; j++)
+            m->data[i][j] = 0;
+    }
+    return m;
+}
+
+void free_matrix(TMatrix *m) {
+    if (m) {
+        for (int i = 0; i < m->rows; i++)
+            TS_FREE(m->data[i]);
+        TS_FREE(m->data);
+        TS_FREE(m);
+    }
+}
+
+TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B) {
+    if (A->rows != B->rows || A->cols != B->cols)
+        error("Matrix dimensions mismatch for addition");
+    TMatrix *result = create_matrix(A->rows, A->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < A->cols; j++)
+            result->data[i][j] = A->data[i][j] + B->data[i][j];
+    }
+    return result;
+}
+
+TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B) {
+    if (A->cols != B->rows)
+        error("Matrix dimensions mismatch for multiplication");
+    TMatrix *result = create_matrix(A->rows, B->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < B->cols; j++) {
+            int sum = 0;
+            for (int k = 0; k < A->cols; k++)
+                sum += A->data[i][k] * B->data[k][j];
+            result->data[i][j] = sum;
+        }
+    }
+    return result;
+}
+
+static void int_to_ternary_internal(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = (n < 0);
+    if (negative) n = -n;
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative) temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+void serialize_matrix(TMatrix *m, const char *filename) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) error("Failed to open file for matrix serialization");
+    fprintf(fp, "%d %d\n", m->rows, m->cols);
+    char buffer[64];
+    for (int i = 0; i < m->rows; i++) {
+        for (int j = 0; j < m->cols; j++) {
+            int_to_ternary_internal(m->data[i][j], buffer);
+            fprintf(fp, "%s ", buffer);
+        }
+        fprintf(fp, "\n");
+    }
+    fclose(fp);
+}
+
+TMatrix *deserialize_matrix(const char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (!fp) error("Failed to open file for matrix deserialization");
+    int rows, cols;
+    if (fscanf(fp, "%d %d", &rows, &cols) != 2)
+        error("Failed to read matrix dimensions");
+    TMatrix *m = create_matrix(rows, cols);
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            char buf[64];
+            if (fscanf(fp, "%63s", buf) != 1)
+                error("Failed to read matrix element");
+            int value = 0;
+            char *p = buf;
+            int is_negative = 0;
+            if (*p == '-') { is_negative = 1; p++; }
+            while (*p) {
+                if (*p < '0' || *p > '2')
+                    error("Invalid digit in ternary number");
+                value = value * 3 + (*p - '0');
+                p++;
+            }
+            if (is_negative) value = -value;
+            m->data[i][j] = value;
+        }
+    }
+    fclose(fp);
+    return m;
+}
+
+/*---------------- Discrete Math–Enhanced Opcode Functions ----------------*/
+void discrete_opcode_encode(int opcode, char *encoded_buffer) {
+    char temp[64];
+    int_to_ternary(opcode, temp);
+    int checksum = 0;
+    for (int i = 0; temp[i] != '\0'; i++) {
+        if (temp[i] >= '0' && temp[i] <= '2')
+            checksum += (temp[i] - '0');
+    }
+    checksum %= 3;
+    sprintf(encoded_buffer, "%s%c", temp, '0' + checksum);
+}
+
+int discrete_opcode_validate(const char *encoded_opcode) {
+    int len = strlen(encoded_opcode);
+    if (len < 2) return 0;
+    int computed_sum = 0;
+    for (int i = 0; i < len - 1; i++) {
+        if (encoded_opcode[i] < '0' || encoded_opcode[i] > '2')
+            return 0;
+        computed_sum += (encoded_opcode[i] - '0');
+    }
+    computed_sum %= 3;
+    int provided_checksum = encoded_opcode[len - 1] - '0';
+    return (computed_sum == provided_checksum);
+}
+@*/
+
+/*=====================================================================
+  Kernel Module Implementation: ternary_system_kernel.c
+  Demonstrates the ternary system functions in a Linux kernel module.
+=====================================================================*/
+@* Kernel Module Implementation: ternary_system_kernel.c
+@o ternary_system_kernel.c
+@c
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <linux/init.h>
+#include "ternary_system.h"
+
+static int __init ternary_system_init(void) {
+    TS_PRINT("Ternary System Kernel Module Loaded\n");
+
+    {
+        const char *expr = "12+21*(2-1)";
+        int result = tritjs_eval_expression(expr);
+        char buf[64];
+        int_to_ternary(result, buf);
+        TS_PRINT("Expression '%s' evaluated to: %s (ternary)\n", expr, buf);
+    }
+
+    {
+        TS_PRINT("Solving Tower of Hanoi with 3 disks:\n");
+        solve_hanoi(3);
+    }
+
+    {
+        int opcode = 5;
+        char encoded[64];
+        discrete_opcode_encode(opcode, encoded);
+        TS_PRINT("Opcode %d encoded as: %s\n", opcode, encoded);
+        if (discrete_opcode_validate(encoded))
+            TS_PRINT("Encoded opcode %s is valid.\n", encoded);
+        else
+            TS_PRINT("Encoded opcode %s is invalid.\n", encoded);
+    }
+
+    return 0;
+}
+
+static void __exit ternary_system_exit(void) {
+    TS_PRINT("Ternary System Kernel Module Unloaded\n");
+}
+
+module_init(ternary_system_init);
+module_exit(ternary_system_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Your Name");
+MODULE_DESCRIPTION("Ternary System Kernel Module with Unified Ternary Logic, Axion Features, and Discrete Math Opcode Enhancements");
+#endif
+@*/
+
+/*=====================================================================
+  Python Utility Program: ternary_system_util.py
+  This Python script serves as the user–space utility program. It loads the compiled
+  shared library (e.g., libternary_system.so) via ctypes and exposes commands to:
+    - Evaluate ternary arithmetic expressions,
+    - Solve the Tower of Hanoi,
+    - Demonstrate discrete math–enhanced opcode encoding/validation.
+  The script supports both command-line options and an interactive mode.
+=====================================================================*/
+@* Python Utility Program: ternary_system_util.py
+@o ternary_system_util.py
+@c
+#!/usr/bin/env python3
+import sys
+import ctypes
+
+# Load the shared library.
+# Ensure that libternary_system.so is in the same directory or in the library path.
+lib = ctypes.CDLL("./libternary_system.so")
+
+# Set function prototypes.
+lib.tritjs_eval_expression.argtypes = [ctypes.c_char_p]
+lib.tritjs_eval_expression.restype = ctypes.c_int
+
+lib.int_to_ternary.argtypes = [ctypes.c_int, ctypes.c_char_p]
+lib.int_to_ternary.restype = None
+
+lib.solve_hanoi.argtypes = [ctypes.c_int]
+lib.solve_hanoi.restype = None
+
+lib.discrete_opcode_encode.argtypes = [ctypes.c_int, ctypes.c_char_p]
+lib.discrete_opcode_encode.restype = None
+
+lib.discrete_opcode_validate.argtypes = [ctypes.c_char_p]
+lib.discrete_opcode_validate.restype = ctypes.c_int
+
+def evaluate_expression(expr):
+    result = lib.tritjs_eval_expression(expr.encode('utf-8'))
+    buffer = ctypes.create_string_buffer(64)
+    lib.int_to_ternary(result, buffer)
+    print("Expression evaluated to (ternary):", buffer.value.decode())
+
+def solve_hanoi_wrapper(n):
+    lib.solve_hanoi(n)
+
+def opcode_demo(opcode):
+    buffer = ctypes.create_string_buffer(64)
+    lib.discrete_opcode_encode(opcode, buffer)
+    encoded = buffer.value.decode()
+    print(f"Opcode {opcode} encoded as: {encoded}")
+    valid = lib.discrete_opcode_validate(buffer)
+    if valid:
+        print("Encoded opcode is valid.")
+    else:
+        print("Encoded opcode is invalid.")
+
+def print_help():
+    print("Ternary Systems B01_py Utility (Python Version)")
+    print("=================================================")
+    print("Usage:")
+    print("  python ternary_system_util.py -expr 'expression'")
+    print("  python ternary_system_util.py -hanoi n")
+    print("  python ternary_system_util.py -opcode number")
+    print("  python ternary_system_util.py interactive")
+    print("=================================================")
+
+def interactive_mode():
+    print("Entering interactive mode. Type 'help' for commands, 'exit' to quit.")
+    while True:
+        line = input("ts> ")
+        if line.strip() == "exit":
+            print("Exiting interactive mode.")
+            break
+        elif line.strip() == "help":
+            print_help()
+        else:
+            tokens = line.split()
+            if not tokens: continue
+            cmd = tokens[0]
+            if cmd == "expr":
+                expr = line[5:].strip()  # Skip the "expr " part
+                evaluate_expression(expr)
+            elif cmd == "hanoi":
+                try:
+                    n = int(tokens[1])
+                    solve_hanoi_wrapper(n)
+                except (IndexError, ValueError):
+                    print("Usage: hanoi <number>")
+            elif cmd == "opcode":
+                try:
+                    opcode = int(tokens[1])
+                    opcode_demo(opcode)
+                except (IndexError, ValueError):
+                    print("Usage: opcode <number>")
+            else:
+                print("Unknown command. Type 'help' for available commands.")
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] == "interactive":
+        interactive_mode()
+    elif sys.argv[1] == "-expr":
+        if len(sys.argv) < 3:
+            print("Usage: python ternary_system_util.py -expr 'expression'")
+            sys.exit(1)
+        evaluate_expression(sys.argv[2])
+    elif sys.argv[1] == "-hanoi":
+        if len(sys.argv) < 3:
+            print("Usage: python ternary_system_util.py -hanoi <number>")
+            sys.exit(1)
+        try:
+            n = int(sys.argv[2])
+            solve_hanoi_wrapper(n)
+        except ValueError:
+            print("Invalid number for hanoi.")
+    elif sys.argv[1] == "-opcode":
+        if len(sys.argv) < 3:
+            print("Usage: python ternary_system_util.py -opcode <number>")
+            sys.exit(1)
+        try:
+            opcode = int(sys.argv[2])
+            opcode_demo(opcode)
+        except ValueError:
+            print("Invalid opcode.")
+    else:
+        print_help()
+
+if __name__ == "__main__":
+    main()
+@*/
+
+/*=====================================================================
+  End of Ternary Systems B01_py CWEB Document
+=====================================================================*/
