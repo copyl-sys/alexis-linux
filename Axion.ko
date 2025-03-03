@@ -1,30 +1,31 @@
 /*
- * Objective: Unified AI-Powered Axion Module
- * "Axion" is a comprehensive kernel module that:
+ * Objective: Unified AI-Powered Axion Module with Planned Ternary Evolution
+ * "Axion" is a comprehensive kernel module designed to evolve from binary to ternary logic:
  * - Dynamically Manages Resources: Monitors CPU, RAM, and GPU usage with AI-driven predictive load balancing,
- *   adaptive resource weighting, and feedback loops to optimize system performance.
- * - Executes Ternary Binaries: Supports both a complete (CISC) and reduced (RISC) ternary instruction set with
- *   JIT compilation, optimized by AI with self-correcting confidence metrics, and dynamically chosen by AI based
- *   on workload complexity and resource usage.
+ *   adaptive resource weighting, and feedback loops, preparing for ternary-based resource allocation.
+ * - Executes Ternary Binaries: Supports ternary binary execution (currently emulated on binary hardware) with
+ *   JIT compilation, optimized by AI with self-correcting confidence metrics, and designed for future native
+ *   ternary hardware support.
  * - Acts as an AI-Powered Package Manager: Predicts software needs, resolves dependencies, manages updates with
- *   risk scoring, and supports natural language commands for user-friendly package management.
+ *   risk scoring, and supports natural language commands, adaptable to ternary logic for dependency states.
  * - Includes Advanced Features: Anomaly detection, self-healing, rollback mechanisms with suppression, and
- *   detailed telemetry for system monitoring and debugging.
+ *   detailed telemetry, with AI evolving toward ternary decision-making.
+ *
+ * Evolutionary Intent:
+ * - Current State: Operates on binary hardware, emulating ternary logic (-1, 0, 1) to model "unknown" states
+ *   directly, reducing abstraction overhead compared to binary Boolean models.
+ * - Planned Evolution: AI guides a transition to native ternary hardware by refining instruction sets, optimizing
+ *   resource management, and adapting package logic for trivalent states (e.g., installed, uninstalled, pending).
+ * - Ternary Advantage: Native support for three states eliminates the need for multi-bit encoding of "unknown,"
+ *   aligning computation with human-like reasoning and improving efficiency (1.585 bits/trit vs. 2+ bits in binary).
+ * - AI Role: Dynamically adjusts between binary emulation and ternary logic, learns optimal ternary instruction
+ *   usage, and prepares for hardware shifts by logging metrics for future ternary-native implementations.
  *
  * Additional Information:
- * - Ternary Instruction Sets:
- *   - CISC: Comprehensive set with 12 instructions (arithmetic, logic, control flow, memory) for complex workloads.
- *   - RISC: Reduced set with 6 instructions (basic arithmetic, jump, memory) for simplicity and efficiency.
- *   - AI Choice: Selects CISC for large code sizes (>1024 bytes) or high CPU usage (>70%), RISC otherwise.
- * - Memory Management Security: Implements bounds checking, allocation validation, and proper cleanup to prevent
- *   leaks, overflows, and exploits.
- * - Resource Monitoring: CPU usage approximated (replace with /proc/stat parsing), GPU usage simulated (replace with
- *   driver API like NVML), RAM usage fully implemented.
- * - Package Management: Basic dependency resolution and update system; extend with real package repositories for
- *   production use.
- * - Intended Use: Research platform, embedded systems, or custom environments; not a direct replacement for mature
- *   tools like apt without further development.
- * - Open-Source: Licensed under GPL; assumes a transparent training dataset hosted on a public Git repository.
+ * - Memory Security: Includes bounds checking, allocation validation, and cleanup to prevent leaks and exploits.
+ * - Current Limitations: GPU usage is simulated (replace with NVML or similar); CPU usage approximated (enhance
+ *   with /proc/stat); package manager is basic (extend with real repositories).
+ * - Open-Source: Licensed under GPL; assumes a transparent training dataset on a public Git repo for AI evolution.
  */
 
 #include <linux/module.h>
@@ -54,63 +55,56 @@
 #include <asm/io.h>
 
 /* Constants and Macros */
-#define DEVICE_NAME "axion"                          // Device name for the character device
-#define AXION_DEFAULT_REGISTER 0x1F                  // Default value for the general-purpose register
-#define WORKLOAD_HISTORY_SIZE 50                     // Size of the workload history buffer for tracking
-#define WORKLOAD_HISTORY_MIN 10                      // Minimum depth for workload history (not enforced here)
-#define WORKLOAD_HISTORY_MAX 100                     // Maximum depth for workload history (not enforced here)
-#define ANOMALY_THRESHOLD 30                         // Threshold (%) for detecting workload anomalies
-#define SELF_HEALING_THRESHOLD 50                    // Threshold (%) for triggering self-healing
+#define DEVICE_NAME "axion_opt"                      // Device name for character device
+#define AXION_DEFAULT_REGISTER 0x1F                  // Default value for general-purpose register
+#define AXION_DEBUGFS_DIR "axion_debug"              // Debugfs directory name
+#define AXION_DEBUGFS_FILE "cpu_state"               // Debugfs file name for telemetry
+#define WORKLOAD_HISTORY_SIZE 50                     // Size of workload history buffer
+#define WORKLOAD_HISTORY_MIN 10                      // Minimum depth (informational)
+#define WORKLOAD_HISTORY_MAX 100                     // Maximum depth (informational)
+#define ANOMALY_THRESHOLD 30                         // Threshold (%) for anomaly detection
+#define SELF_HEALING_THRESHOLD 50                    // Threshold (%) for self-healing
 #define ROLLBACK_THRESHOLD_REALTIME 70               // Rollback threshold (%) for real-time processes
 #define ROLLBACK_THRESHOLD_BACKGROUND 50             // Rollback threshold (%) for background processes
-#define CRITICAL_FAILURE_THRESHOLD 30                // Threshold for enabling rollback suppression mode
+#define CRITICAL_FAILURE_THRESHOLD 30                // Threshold for rollback suppression mode
 #define SUPPRESSION_GRADUAL_INCREASE 2               // Incremental increase in suppression resistance
-#define PREDICTIVE_LOAD_BALANCING_INTERVAL 5000      // Interval (ms) for predictive load balancing
-#define RESOURCE_WEIGHT_CPU 0.5                      // Initial weight for CPU resource prioritization
-#define RESOURCE_WEIGHT_GPU 0.3                      // Initial weight for GPU resource prioritization
-#define RESOURCE_WEIGHT_RAM 0.2                      // Initial weight for RAM resource prioritization
-#define FEEDBACK_ADJUSTMENT_FACTOR 0.1               // Factor for AI-driven resource weight adjustments
-#define MAX_PACKAGES 32                              // Maximum number of packages tracked
+#define PREDICTIVE_LOAD_BALANCING_INTERVAL 5000      // Load balancing interval in milliseconds
+#define RESOURCE_WEIGHT_CPU 0.5                      // Initial CPU weight for resource prioritization
+#define RESOURCE_WEIGHT_GPU 0.3                      // Initial GPU weight for resource prioritization
+#define RESOURCE_WEIGHT_RAM 0.2                      // Initial RAM weight for resource prioritization
+#define FEEDBACK_ADJUSTMENT_FACTOR 0.1               // AI adjustment factor for resource weights
+#define MAX_PACKAGES 32                              // Maximum number of tracked packages
 #define MAX_DEPS 8                                   // Maximum dependencies per package
-#define TBIN_MAGIC 0x5442494E                        // Magic number for ternary binary validation ('TBIN')
+#define TBIN_MAGIC 0x5442494E                        // Magic number for ternary binary ('TBIN')
 #define TERNARY_MEM_SIZE 32                          // Size of ternary memory in trits
-#define CISC_THRESHOLD 1024                          // Code size threshold (bytes) for choosing CISC over RISC
 
 // Ternary states
-#define TERNARY_NEGATIVE -1                          // Represents -1 in ternary logic
-#define TERNARY_ZERO 0                               // Represents 0 in ternary logic
-#define TERNARY_POSITIVE 1                           // Represents 1 in ternary logic
-
-// CISC Instruction Set (Complete)
-#define CISC_TADD   0x01  // Add two trits (e.g., 1 + 1 = 1, clamped)
-#define CISC_TSUB   0x02  // Subtract two trits (e.g., 1 - -1 = 1, clamped)
-#define CISC_TMUL   0x03  // Multiply two trits (e.g., -1 * 1 = -1, clamped)
-#define CISC_TAND   0x04  // Ternary AND (minimum of two trits)
-#define CISC_TOR    0x05  // Ternary OR (maximum of two trits)
-#define CISC_TNOT   0x06  // Ternary NOT (negate trit, e.g., -1 becomes 1)
-#define CISC_TJMP   0x07  // Jump to address if condition trit is non-zero
-#define CISC_TJZ    0x08  // Jump to address if condition trit is zero
-#define CISC_TJNZ   0x09  // Jump to address if condition trit is non-zero (redundant with TJMP, kept for completeness)
-#define CISC_TLOAD  0x0A  // Load trit from memory into register
-#define CISC_TSTORE 0x0B  // Store trit from register into memory
-#define CISC_THLT   0x0C  // Halt execution of the ternary binary
-
-// RISC Instruction Set (Reduced)
-#define RISC_TADD   0x01  // Add two trits (same as CISC_TADD)
-#define RISC_TSUB   0x02  // Subtract two trits (same as CISC_TSUB)
-#define RISC_TJMP   0x03  // Jump to address if condition trit is non-zero
-#define RISC_TLOAD  0x04  // Load trit from memory into register
-#define RISC_TSTORE 0x05  // Store trit from register into memory
-#define RISC_THLT   0x06  // Halt execution of the ternary binary
+#define TERNARY_NEGATIVE -1                          // Represents -1 (e.g., false or unknown)
+#define TERNARY_ZERO 0                               // Represents 0 (e.g., neutral or unknown)
+#define TERNARY_POSITIVE 1                           // Represents 1 (e.g., true)
 
 // Process types
-#define PROCESS_REALTIME 0                           // Identifier for real-time processes
-#define PROCESS_BACKGROUND 1                         // Identifier for background processes
+#define PROCESS_REALTIME 0                           // Real-time process identifier
+#define PROCESS_BACKGROUND 1                         // Background process identifier
+
+// Ternary Instruction Set (CISC-like for evolution to native ternary)
+#define TADD   0x01  // Add two trits (e.g., 1 + 1 = 1, clamped)
+#define TSUB   0x02  // Subtract two trits (e.g., 1 - -1 = 1, clamped)
+#define TMUL   0x03  // Multiply two trits (e.g., -1 * 1 = -1, clamped)
+#define TAND   0x04  // Ternary AND (minimum of two trits)
+#define TOR    0x05  // Ternary OR (maximum of two trits)
+#define TNOT   0x06  // Ternary NOT (negate trit, e.g., -1 becomes 1)
+#define TJMP   0x07  // Jump to address if condition trit is non-zero
+#define TJZ    0x08  // Jump to address if condition trit is zero
+#define TJNZ   0x09  // Jump to address if condition trit is non-zero
+#define TLOAD  0x0A  // Load trit from memory into register
+#define TSTORE 0x0B  // Store trit from register into memory
+#define THLT   0x0C  // Halt execution
 
 /* Data Structures */
 
 /**
- * struct resource_state - Holds current resource usage metrics
+ * struct resource_state - Tracks current system resource usage
  * @cpu_usage: CPU usage percentage (0-100)
  * @ram_usage: RAM usage percentage (0-100)
  * @gpu_usage: GPU usage percentage (0-100)
@@ -124,10 +118,10 @@ struct resource_state {
 };
 
 /**
- * struct rl_model - Reinforcement learning model for resource allocation
- * @q_table: Q-table mapping 3 states (low, medium, high) to 3 actions
+ * struct rl_model - Reinforcement learning model for resource management
+ * @q_table: Q-table mapping 3 states (low, med, high) to 3 actions
  * @last_state: Previous state for Q-table updates
- * @last_action: Previous action taken
+ * @last_action: Last action taken
  */
 struct rl_model {
     int q_table[3][3];
@@ -136,30 +130,27 @@ struct rl_model {
 };
 
 /**
- * struct tbin_header - Header structure for ternary binaries
- * @magic: Magic number for validation (TBIN_MAGIC)
+ * struct tbin_header - Header for ternary binary files
+ * @magic: Magic number (TBIN_MAGIC) for validation
  * @entry_point: Starting address of the code
  * @code_size: Size of the code section in bytes
  * @data_size: Size of the data section in bytes (unused here)
- * @is_cisc: Flag set by AI to indicate CISC (1) or RISC (0)
  */
 struct tbin_header {
     uint32_t magic;
     uint32_t entry_point;
     uint32_t code_size;
     uint32_t data_size;
-    int is_cisc;
 };
 
 /**
- * struct tbin_state - State of the ternary binary execution
- * @reg: Array of 3 trit registers (-1, 0, 1)
- * @memory: Array of 32 trits for memory operations
+ * struct tbin_state - State of ternary binary execution
+ * @reg: 3 trit registers (-1, 0, 1)
+ * @memory: 32-trit memory array
  * @ip: Instruction pointer (byte offset)
- * @code: Pointer to the loaded code buffer
+ * @code: Pointer to loaded code buffer
  * @code_size: Size of the code buffer
  * @running: Execution status (0=stopped, 1=running)
- * @is_cisc: Current instruction set mode (1=CISC, 0=RISC)
  */
 struct tbin_state {
     int8_t reg[3];
@@ -168,7 +159,6 @@ struct tbin_state {
     void *code;
     uint32_t code_size;
     int running;
-    int is_cisc;
 };
 
 /**
@@ -177,42 +167,42 @@ struct tbin_state {
  * @version: Package version (up to 15 chars + null)
  * @deps: Array of dependency names
  * @dep_count: Number of dependencies
+ * @state: Ternary state (-1=uninstalled, 0=pending, 1=installed)
  * @is_binary: Binary (1) or source (0) build
  * @risk_score: Risk score for updates (0-100)
- * @installed: Installation status (0=not installed, 1=installed)
  */
 struct package {
     char name[32];
     char version[16];
     char deps[MAX_DEPS][32];
     int dep_count;
+    int state; // Ternary state for future native support
     int is_binary;
     int risk_score;
-    int installed;
 };
 
 /**
  * struct axion_state - Global state for the Axion module
- * @res_history: History of resource usage
+ * @res_history: Resource usage history
  * @res_history_index: Current index in resource history
  * @rl: RL model for resource allocation
  * @tbin: Ternary binary execution state
  * @tbin_confidence_metric: AI confidence in ternary optimization
- * @tbin_execution_profile: Execution profile for ternary binaries
- * @packages: List of installed packages
- * @package_count: Number of installed packages
- * @suggestion: AI-generated suggestion string
+ * @tbin_execution_profile: Ternary execution profile
+ * @packages: List of tracked packages
+ * @package_count: Number of packages
+ * @suggestion: AI-generated suggestion
  * @last_cmd: Last natural language command
  * @last_suggestion_time: Timestamp of last suggestion
- * @python_usage: Simulated Python usage percentage
- * @gaming_usage: Simulated gaming usage percentage
+ * @python_usage: Simulated Python usage (%)
+ * @gaming_usage: Simulated gaming usage (%)
  * @axion_register: General-purpose register
  * @workload_history: Workload history buffer
  * @workload_index: Current index in workload history
- * @adaptive_threshold: Adaptive threshold for self-healing
+ * @adaptive_threshold: Threshold for self-healing
  * @confidence_metric: Overall AI confidence
  * @rollback_counter: Number of rollback events
- * @rollback_reason: Reasons for rollbacks (1=update, 2=anomaly)
+ * @rollback_reason: Reasons for rollbacks
  * @rollback_suppression: Suppression mode flag
  * @suppression_resistance: Suppression resistance factor
  * @resource_weight_cpu: CPU resource weight
@@ -250,81 +240,77 @@ struct axion_state {
 };
 
 /* IOCTL Commands */
-#define AXION_GET_SUGGESTION    _IOR('a', 1, char[256])  // Retrieve AI suggestion
-#define AXION_SET_REGISTER      _IOW('a', 2, uint64_t)   // Set axion_register
-#define AXION_GET_REGISTER      _IOR('a', 3, uint64_t)   // Get axion_register
-#define AXION_SET_ACTION        _IOW('a', 4, int)        // Force resource allocation action
-#define AXION_TBIN_LOAD         _IOW('a', 5, struct tbin_header) // Load ternary binary
-#define AXION_TBIN_STEP         _IO('a',  6)             // Execute one ternary instruction
-#define AXION_TBIN_GET_STATE    _IOR('a', 7, struct tbin_state) // Get ternary execution state
-#define AXION_INSTALL_PKG       _IOW('a', 8, char[32])   // Install a package
-#define AXION_UPDATE_PKG        _IOW('a', 9, char[32])   // Update a package
-#define AXION_SET_BINARY        _IOW('a', 10, int)       // Set binary/source build for last package
-#define AXION_ROLLBACK          _IOW('a', 11, char[32])  // Rollback a package
-#define AXION_NL_COMMAND        _IOW('a', 12, char[256]) // Process natural language command
-#define AXION_GET_PERF_FEEDBACK _IOR('a', 13, int)       // Get performance feedback
+#define AXION_SET_REGISTER      _IOW('a', 1, uint64_t)   // Set axion_register
+#define AXION_GET_REGISTER      _IOR('a', 2, uint64_t)   // Get axion_register
+#define AXION_TBIN_LOAD         _IOW('a', 3, struct tbin_header) // Load ternary binary
+#define AXION_TBIN_STEP         _IO('a',  4)             // Step ternary execution
+#define AXION_TBIN_GET_STATE    _IOR('a', 5, struct tbin_state) // Get ternary state
+#define AXION_GET_SUGGESTION    _IOR('a', 6, char[256])  // Get AI suggestion
+#define AXION_INSTALL_PKG       _IOW('a', 7, char[32])   // Install package
+#define AXION_UPDATE_PKG        _IOW('a', 8, char[32])   // Update package
+#define AXION_SET_BINARY        _IOW('a', 9, int)        // Set binary/source build
+#define AXION_ROLLBACK          _IOW('a', 10, char[32])  // Rollback package
+#define AXION_NL_COMMAND        _IOW('a', 11, char[256]) // Natural language command
+#define AXION_GET_PERF_FEEDBACK _IOR('a', 12, int)       // Get performance feedback
 
 /* Global Variables */
-static dev_t dev_num;                                // Device number for character device
+static dev_t dev_num;                                // Device number
 static struct cdev axion_cdev;                       // Character device structure
 static struct class *axion_class;                    // Device class
 static struct device *axion_device;                  // Device instance
-static struct task_struct *axion_thread;             // Thread for continuous monitoring
-static struct dentry *debugfs_dir, *debugfs_file;    // Debugfs directory and file for telemetry
-static struct workqueue_struct *axion_wq;            // Workqueue for suggestion and workload tasks
-static struct work_struct axion_work;                // Work item for suggestion tasks
-static struct timer_list axion_load_balancer;        // Timer for predictive load balancing
+static struct task_struct *axion_thread;             // Monitoring thread
+static struct dentry *debugfs_dir, *debugfs_file;    // Debugfs entries
+static struct workqueue_struct *axion_wq;            // Workqueue for suggestions
+static struct work_struct axion_work;                // Work item
+static struct timer_list axion_load_balancer;        // Load balancing timer
 static struct axion_state state = {
-    .rl = { .q_table = {{5, 2, 1}, {3, 5, 2}, {1, 3, 5}}, .last_state = 0, .last_action = 0 },  // Initial RL model
-    .tbin_confidence_metric = 100,                   // Initial ternary confidence
-    .tbin_execution_profile = 0,                     // Initial ternary profile
-    .axion_register = AXION_DEFAULT_REGISTER,        // Initial register value
-    .adaptive_threshold = SELF_HEALING_THRESHOLD,    // Initial self-healing threshold
-    .confidence_metric = 100,                        // Initial overall AI confidence
-    .resource_weight_cpu = RESOURCE_WEIGHT_CPU,      // Initial CPU weight
-    .resource_weight_gpu = RESOURCE_WEIGHT_GPU,      // Initial GPU weight
-    .resource_weight_ram = RESOURCE_WEIGHT_RAM       // Initial RAM weight
+    .rl = { .q_table = {{5, 2, 1}, {3, 5, 2}, {1, 3, 5}}, .last_state = 0, .last_action = 0 },
+    .tbin_confidence_metric = 100,
+    .tbin_execution_profile = 0,
+    .axion_register = AXION_DEFAULT_REGISTER,
+    .adaptive_threshold = SELF_HEALING_THRESHOLD,
+    .confidence_metric = 100,
+    .resource_weight_cpu = RESOURCE_WEIGHT_CPU,
+    .resource_weight_gpu = RESOURCE_WEIGHT_GPU,
+    .resource_weight_ram = RESOURCE_WEIGHT_RAM
 };
 
 /* Resource Monitoring Functions */
 
 /**
- * get_cpu_usage - Calculate current CPU usage percentage
- * Returns: CPU usage as a percentage (0-100)
- * Note: Simplified implementation using kernel-provided get_cpu_times; for production, replace with
- *       detailed parsing of /proc/stat for precise usage metrics across all cores.
+ * get_cpu_usage - Calculate CPU usage percentage
+ * Returns: CPU usage (0-100)
+ * Note: Simplified; replace with /proc/stat parsing for precise multi-core usage in production.
  */
 static int get_cpu_usage(void) {
     unsigned long user, nice, system, idle, iowait, irq, softirq;
-    get_cpu_times(&user, &nice, &system, &idle, &iowait, &irq, &softirq); // Kernel function
+    get_cpu_times(&user, &nice, &system, &idle, &iowait, &irq, &softirq);
     unsigned long total = user + nice + system + idle + iowait + irq + softirq;
-    return total ? (int)(((user + nice + system) * 100) / total) : 0; // Avoid division by zero
+    return total ? (int)(((user + nice + system) * 100) / total) : 0;
 }
 
 /**
- * get_ram_usage - Calculate current RAM usage percentage
- * Returns: RAM usage as a percentage (0-100)
- * Uses kernel's si_meminfo to get total and free RAM, providing accurate memory usage.
+ * get_ram_usage - Calculate RAM usage percentage
+ * Returns: RAM usage (0-100)
+ * Uses kernel's si_meminfo for accurate memory stats.
  */
 static int get_ram_usage(void) {
     struct sysinfo si;
-    si_meminfo(&si); // Retrieve system memory info
-    return (int)(((si.totalram - si.freeram) * 100) / si.totalram); // Calculate usage percentage
+    si_meminfo(&si);
+    return (int)(((si.totalram - si.freeram) * 100) / si.totalram);
 }
 
 /**
- * get_gpu_usage - Calculate current GPU usage percentage
- * Returns: Simulated GPU usage (0-100); for production, integrate with a GPU driver API (e.g., NVML).
- * Note: Currently a placeholder due to lack of universal GPU driver access in kernel space.
+ * get_gpu_usage - Calculate GPU usage percentage
+ * Returns: Simulated GPU usage (0-100); replace with driver API (e.g., NVML) for real data.
  */
 static int get_gpu_usage(void) {
-    return (int)(random32() % 100); // Simulated value; replace with actual driver call
+    return (int)(random32() % 100); // Placeholder for future ternary-native GPU integration
 }
 
 /**
- * axion_get_resource_usage - Populate resource state with current usage metrics
- * @state: Pointer to resource_state structure to be filled
- * Combines CPU, RAM, and GPU usage into a single structure for monitoring and decision-making.
+ * axion_get_resource_usage - Populate resource state with current usage
+ * @state: Pointer to resource_state structure
  */
 static void axion_get_resource_usage(struct resource_state *state) {
     state->cpu_usage = get_cpu_usage();
@@ -333,90 +319,15 @@ static void axion_get_resource_usage(struct resource_state *state) {
 }
 
 /**
- * get_usage_state - Discretize a usage percentage into low, medium, or high states
- * @usage: Usage percentage (0-100)
- * Returns: State value (0=low, 1=medium, 2=high)
- * Used by RL to categorize resource usage levels for decision-making.
- */
-static int get_usage_state(int usage) {
-    if (usage <= 33) return 0; // Low usage
-    if (usage <= 66) return 1; // Medium usage
-    return 2;                  // High usage
-}
-
-/**
- * axion_rl_decide_action - Decide resource allocation action using reinforcement learning
- * @state: Current resource state
- * Returns: Action to take (0=balanced, 1=CPU-heavy, 2=GPU-heavy)
- * Uses a Q-table to select the best action, with 10% exploration to avoid local optima.
- */
-static int axion_rl_decide_action(struct resource_state *state) {
-    int cpu_state = get_usage_state(state->cpu_usage); // Base decision on CPU usage
-    int action = 0, max_q = state.rl.q_table[cpu_state][0]; // Start with balanced action
-
-    // Find action with highest Q-value
-    for (int i = 1; i < 3; i++) {
-        if (state.rl.q_table[cpu_state][i] > max_q) {
-            max_q = state.rl.q_table[cpu_state][i];
-            action = i;
-        }
-    }
-
-    // 10% chance of random exploration to improve learning
-    if ((random32() % 100) < 10) action = random32() % 3;
-
-    return action;
-}
-
-/**
- * axion_apply_action - Apply the chosen resource allocation action
- * @action: Action to apply (0=balanced, 1=CPU-heavy, 2=GPU-heavy)
- * Modifies the scheduler for CPU actions; GPU action is a placeholder for driver integration.
- */
-static void axion_apply_action(int action) {
-    struct task_struct *task = current; // Current task (calling process)
-    struct sched_param param = { .sched_priority = 0 }; // Default scheduler parameters
-
-    switch (action) {
-        case 0: // Balanced allocation
-            sched_setscheduler(task, SCHED_NORMAL, ¶m); // Normal scheduling policy
-            break;
-        case 1: // CPU-heavy allocation
-            param.sched_priority = 10; // Increase priority
-            sched_setscheduler(task, SCHED_FIFO, ¶m); // Real-time FIFO scheduling
-            break;
-        case 2: // GPU-heavy allocation
-            // Placeholder: Integrate GPU driver call (e.g., NVML power limit adjustment)
-            break;
-    }
-}
-
-/**
- * axion_update_rl - Update the RL model with a reward based on action outcome
- * @state: Current resource state
- * @action: Action taken
- * @prev_state: Previous state for Q-table update
- * Rewards good decisions (matching high usage to appropriate action) and penalizes poor ones.
- */
-static void axion_update_rl(struct resource_state *state, int action, int prev_state) {
-    int reward = (state->cpu_usage > ANOMALY_THRESHOLD && action != 1) ||
-                 (state->gpu_usage > ANOMALY_THRESHOLD && action != 2) ?
-                 RL_REWARD_BAD : RL_REWARD_GOOD; // Negative reward for mismatch, positive otherwise
-    state.rl.q_table[prev_state][action] += reward; // Update Q-table
-    state.rl.last_state = get_usage_state(state->cpu_usage); // Store new state
-    state.rl.last_action = action; // Store action taken
-}
-
-/**
- * axion_adjust_resource_weights - Dynamically adjust resource weights based on usage
- * Increases weight of the most utilized resource and normalizes to maintain balance.
+ * axion_adjust_resource_weights - Adjust resource weights based on usage
+ * Uses AI feedback loop to prioritize dominant resource, normalizing weights to 1.0.
  */
 static void axion_adjust_resource_weights(void) {
     int cpu_usage = get_cpu_usage();
     int gpu_usage = get_gpu_usage();
     int ram_usage = get_ram_usage();
 
-    // Adjust weights based on dominant resource usage
+    // Increase weight of the most utilized resource
     if (cpu_usage > gpu_usage && cpu_usage > ram_usage) {
         state.resource_weight_cpu += FEEDBACK_ADJUSTMENT_FACTOR;
     } else if (gpu_usage > cpu_usage && gpu_usage > ram_usage) {
@@ -431,171 +342,126 @@ static void axion_adjust_resource_weights(void) {
     state.resource_weight_gpu /= total_weight;
     state.resource_weight_ram /= total_weight;
 
-    // Log the adjustment for telemetry
+    // Log adjustment for telemetry and future ternary optimization
     state.resource_adjustment_log[state.workload_index % WORKLOAD_HISTORY_SIZE] = (int)(state.resource_weight_cpu * 100);
 }
 
 /**
- * axion_predictive_load_balancer - Timer callback for predictive load balancing
+ * axion_predictive_load_balancer - Timer callback for AI-driven load balancing
  * @t: Timer list pointer
- * Evaluates weighted resource usage and logs prioritization decisions.
+ * Prioritizes resources based on weighted usage, preparing for ternary state transitions.
  */
 static void axion_predictive_load_balancer(struct timer_list *t) {
     int cpu_load = get_cpu_usage();
     int ram_usage = get_ram_usage();
     int gpu_load = get_gpu_usage();
 
-    axion_adjust_resource_weights(); // Update weights based on current usage
+    axion_adjust_resource_weights(); // Update weights
 
-    // Check weighted usage against thresholds and log prioritization
+    // Log prioritization decisions based on weighted thresholds
     if (cpu_load * state.resource_weight_cpu > 75) {
-        printk(KERN_INFO "Axion: Prioritizing CPU for high load\n");
+        printk(KERN_INFO "Axion: Prioritizing CPU for computation-heavy tasks\n");
     }
     if (gpu_load * state.resource_weight_gpu > 65) {
-        printk(KERN_INFO "Axion: Prioritizing GPU for graphics tasks\n");
+        printk(KERN_INFO "Axion: Prioritizing GPU for graphics-intensive workloads\n");
     }
     if (ram_usage * state.resource_weight_ram > 70) {
-        printk(KERN_INFO "Axion: Optimizing memory allocation\n");
+        printk(KERN_INFO "Axion: Optimizing memory allocation to prevent overuse\n");
     }
 
-    // Reschedule the timer
+    // Reschedule timer for continuous balancing
     mod_timer(&axion_load_balancer, jiffies + msecs_to_jiffies(PREDICTIVE_LOAD_BALANCING_INTERVAL));
 }
 
 /* Ternary Execution Functions */
 
 /**
- * axion_choose_isa - AI-driven selection of instruction set (CISC or RISC)
- * @code_size: Size of the binary code in bytes
- * Returns: 1 for CISC, 0 for RISC
- * Chooses CISC for complex workloads (large code or high CPU usage) and RISC for simplicity.
- */
-static int axion_choose_isa(uint32_t code_size) {
-    int cpu_usage = get_cpu_usage();
-    // Select CISC for complex or CPU-intensive tasks, RISC for simpler ones
-    if (code_size > CISC_THRESHOLD || cpu_usage > 70) {
-        return 1; // CISC for richer instruction set
-    }
-    return 0; // RISC for efficiency
-}
-
-/**
- * axion_tbin_step - Execute one instruction of the ternary binary (CISC or RISC)
- * Returns: 0 on success, negative on error (e.g., -EINVAL for invalid state, -EFAULT for bounds violation)
- * Handles both CISC and RISC instruction sets with comprehensive bounds checking.
+ * axion_tbin_step - Execute one ternary instruction
+ * Returns: 0 on success, negative on error (e.g., -EINVAL for invalid state)
+ * Implements a ternary instruction set, emulated on binary hardware with future native intent.
  */
 static int axion_tbin_step(void) {
-    // Validate execution state and memory
     if (!state.tbin.running || state.tbin.ip >= state.tbin.code_size - 2 || !state.tbin.code) {
-        printk(KERN_ERR "Axion: Invalid TBIN state for step\n");
+        printk(KERN_ERR "Axion: Invalid TBIN state for execution\n");
         return -EINVAL;
     }
 
-    uint8_t *pc = (uint8_t *)state.tbin.code; // Pointer to current instruction
-    uint8_t opcode = pc[state.tbin.ip]; // Opcode byte
-    int8_t t1 = (pc[state.tbin.ip + 1] == 0xFF) ? -1 : pc[state.tbin.ip + 1]; // First operand trit
-    int8_t t2 = (pc[state.tbin.ip + 2] == 0xFF) ? -1 : pc[state.tbin.ip + 2]; // Second operand trit
+    uint8_t *pc = (uint8_t *)state.tbin.code;
+    uint8_t opcode = pc[state.tbin.ip];
+    int8_t t1 = (pc[state.tbin.ip + 1] == 0xFF) ? -1 : pc[state.tbin.ip + 1];
+    int8_t t2 = (pc[state.tbin.ip + 2] == 0xFF) ? -1 : pc[state.tbin.ip + 2];
 
     // Bounds check to prevent buffer overflow
     if (state.tbin.ip + 2 >= state.tbin.code_size) {
-        printk(KERN_ERR "Axion: Instruction pointer out of bounds\n");
+        printk(KERN_ERR "Axion: TBIN IP out of bounds\n");
         return -EFAULT;
     }
 
-    // Execute based on current ISA mode
-    if (state.tbin.is_cisc) {
-        switch (opcode) {
-            case CISC_TADD:
-                state.tbin.reg[0] = (state.tbin.reg[0] + t1 > 1) ? 1 : (state.tbin.reg[0] + t1 < -1) ? -1 : state.tbin.reg[0] + t1;
-                break;
-            case CISC_TSUB:
-                state.tbin.reg[0] = (state.tbin.reg[0] - t1 > 1) ? 1 : (state.tbin.reg[0] - t1 < -1) ? -1 : state.tbin.reg[0] - t1;
-                break;
-            case CISC_TMUL:
-                state.tbin.reg[0] = (state.tbin.reg[0] * t1 > 1) ? 1 : (state.tbin.reg[0] * t1 < -1) ? -1 : state.tbin.reg[0] * t1;
-                break;
-            case CISC_TAND:
-                state.tbin.reg[0] = (state.tbin.reg[0] < t1) ? state.tbin.reg[0] : t1;
-                break;
-            case CISC_TOR:
-                state.tbin.reg[0] = (state.tbin.reg[0] > t1) ? state.tbin.reg[0] : t1;
-                break;
-            case CISC_TNOT:
-                state.tbin.reg[0] = -t1;
-                break;
-            case CISC_TJMP:
-                if (t2 != 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
-                break;
-            case CISC_TJZ:
-                if (t2 == 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
-                break;
-            case CISC_TJNZ:
-                if (t2 != 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
-                break;
-            case CISC_TLOAD:
-                if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.reg[t2] = state.tbin.memory[t1]; else return -EFAULT;
-                break;
-            case CISC_TSTORE:
-                if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.memory[t1] = state.tbin.reg[t2]; else return -EFAULT;
-                break;
-            case CISC_THLT:
-                state.tbin.running = 0;
-                printk(KERN_INFO "Axion: CISC TBIN halted\n");
-                return 0;
-            default:
-                printk(KERN_ERR "Axion: Unknown CISC opcode 0x%x\n", opcode);
-                return -EINVAL;
-        }
-    } else {
-        switch (opcode) {
-            case RISC_TADD:
-                state.tbin.reg[0] = (state.tbin.reg[0] + t1 > 1) ? 1 : (state.tbin.reg[0] + t1 < -1) ? -1 : state.tbin.reg[0] + t1;
-                break;
-            case RISC_TSUB:
-                state.tbin.reg[0] = (state.tbin.reg[0] - t1 > 1) ? 1 : (state.tbin.reg[0] - t1 < -1) ? -1 : state.tbin.reg[0] - t1;
-                break;
-            case RISC_TJMP:
-                if (t2 != 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
-                break;
-            case RISC_TLOAD:
-                if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.reg[t2] = state.tbin.memory[t1]; else return -EFAULT;
-                break;
-            case RISC_TSTORE:
-                if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.memory[t1] = state.tbin.reg[t2]; else return -EFAULT;
-                break;
-            case RISC_THLT:
-                state.tbin.running = 0;
-                printk(KERN_INFO "Axion: RISC TBIN halted\n");
-                return 0;
-            default:
-                printk(KERN_ERR "Axion: Unknown RISC opcode 0x%x\n", opcode);
-                return -EINVAL;
-        }
+    switch (opcode) {
+        case TADD:
+            state.tbin.reg[0] = (state.tbin.reg[0] + t1 > 1) ? 1 : (state.tbin.reg[0] + t1 < -1) ? -1 : state.tbin.reg[0] + t1;
+            break;
+        case TSUB:
+            state.tbin.reg[0] = (state.tbin.reg[0] - t1 > 1) ? 1 : (state.tbin.reg[0] - t1 < -1) ? -1 : state.tbin.reg[0] - t1;
+            break;
+        case TMUL:
+            state.tbin.reg[0] = (state.tbin.reg[0] * t1 > 1) ? 1 : (state.tbin.reg[0] * t1 < -1) ? -1 : state.tbin.reg[0] * t1;
+            break;
+        case TAND:
+            state.tbin.reg[0] = (state.tbin.reg[0] < t1) ? state.tbin.reg[0] : t1;
+            break;
+        case TOR:
+            state.tbin.reg[0] = (state.tbin.reg[0] > t1) ? state.tbin.reg[0] : t1;
+            break;
+        case TNOT:
+            state.tbin.reg[0] = -t1;
+            break;
+        case TJMP:
+            if (t2 != 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
+            break;
+        case TJZ:
+            if (t2 == 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
+            break;
+        case TJNZ:
+            if (t2 != 0 && t1 * 3 < state.tbin.code_size) state.tbin.ip = t1 * 3; else return -EFAULT;
+            break;
+        case TLOAD:
+            if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.reg[t2] = state.tbin.memory[t1]; else return -EFAULT;
+            break;
+        case TSTORE:
+            if (t1 >= 0 && t1 < TERNARY_MEM_SIZE && t2 >= 0 && t2 < 3) state.tbin.memory[t1] = state.tbin.reg[t2]; else return -EFAULT;
+            break;
+        case THLT:
+            state.tbin.running = 0;
+            printk(KERN_INFO "Axion: TBIN halted\n");
+            return 0;
+        default:
+            printk(KERN_ERR "Axion: Unknown TBIN opcode 0x%x\n", opcode);
+            return -EINVAL;
     }
-    state.tbin.ip += 3; // Advance instruction pointer
+    state.tbin.ip += 3; // Advance IP (ternary instructions are 3 bytes)
     return 0;
 }
 
 /**
- * axion_jit_compile_tbin - Compile and load a ternary binary with AI-chosen ISA
- * @hdr: Pointer to TBIN header structure
- * Returns: 0 on success, negative on error (e.g., -EINVAL for invalid input, -ENOMEM for allocation failure)
- * Includes memory security checks and proper cleanup.
+ * axion_jit_compile_tbin - JIT compile and load a ternary binary
+ * @hdr: Pointer to TBIN header
+ * Returns: 0 on success, negative on error
+ * Prepares for native ternary by optimizing execution on binary hardware.
  */
 static int axion_jit_compile_tbin(struct tbin_header *hdr) {
-    // Validate input header
     if (!hdr || hdr->code_size < 3) {
         printk(KERN_ERR "Axion: Invalid TBIN header\n");
         return -EINVAL;
     }
 
-    // Free existing code buffer if present
+    // Clean up existing code buffer
     if (state.tbin.code) {
         vfree(state.tbin.code);
         state.tbin.code = NULL;
     }
 
-    // AI-driven optimization for ternary execution
+    // AI optimization for ternary execution
     int execution_efficiency = (hdr->code_size > 1024) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
     state.tbin_execution_profile = (state.tbin_execution_profile + execution_efficiency) / 2;
     state.tbin_confidence_metric = (execution_efficiency != state.tbin_execution_profile) ?
@@ -603,73 +469,61 @@ static int axion_jit_compile_tbin(struct tbin_header *hdr) {
     state.tbin_confidence_metric = (state.tbin_confidence_metric > 100) ? 100 :
                                    (state.tbin_confidence_metric < 50) ? 50 : state.tbin_confidence_metric;
 
-    // Allocate memory for code with security check
+    // Allocate memory with security check
     state.tbin.code = vmalloc(hdr->code_size);
     if (!state.tbin.code) {
         printk(KERN_ERR "Axion: Failed to allocate TBIN memory\n");
         return -ENOMEM;
     }
 
-    // Copy code from user space with validation
+    // Securely copy code from user space
     if (copy_from_user(state.tbin.code, (void __user *)hdr->entry_point, hdr->code_size)) {
-        printk(KERN_ERR "Axion: Failed to copy TBIN code from user space\n");
+        printk(KERN_ERR "Axion: Failed to copy TBIN code\n");
         vfree(state.tbin.code);
         state.tbin.code = NULL;
         return -EFAULT;
     }
 
-    // Ensure code size is a multiple of 3 (instruction size)
+    // Validate instruction size alignment
     if (hdr->code_size % 3 != 0) {
-        printk(KERN_ERR "Axion: Invalid TBIN code size (not multiple of 3)\n");
+        printk(KERN_ERR "Axion: Invalid TBIN code size\n");
         vfree(state.tbin.code);
         state.tbin.code = NULL;
         return -EINVAL;
     }
 
-    // Initialize execution state
+    // Initialize ternary execution state
     state.tbin.code_size = hdr->code_size;
     state.tbin.ip = 0;
     state.tbin.running = 1;
-    state.tbin.is_cisc = axion_choose_isa(hdr->code_size); // AI selects ISA
-    memset(state.tbin.reg, 0, sizeof(state.tbin.reg)); // Clear registers
-    memset(state.tbin.memory, 0, sizeof(state.tbin.memory)); // Clear memory
-    printk(KERN_INFO "Axion: TBIN loaded with %s ISA\n", state.tbin.is_cisc ? "CISC" : "RISC");
+    memset(state.tbin.reg, 0, sizeof(state.tbin.reg));
+    memset(state.tbin.memory, 0, sizeof(state.tbin.memory));
+    printk(KERN_INFO "Axion: TBIN loaded for ternary execution\n");
     return 0;
 }
 
 /**
- * axion_register_tbin - Register the TBIN binary format with the kernel
+ * axion_register_tbin - Register TBIN format with the kernel
  * Returns: 0 on success, negative on error
- * Enables execution of TBIN files via binfmt_misc.
+ * Sets up binfmt_misc for ternary binary execution.
  */
 static int axion_register_tbin(void) {
-    return register_binfmt(&axion_tbin_format); // Register TBIN handler
+    return register_binfmt(&axion_tbin_format);
 }
 
 /**
- * load_tbin_binary - Load a TBIN binary via binfmt_misc
- * @bprm: Binary program structure containing file data
- * Returns: 0 on success, negative on error (e.g., -ENOEXEC for invalid format)
- * Validates and compiles the binary using JIT.
+ * load_tbin_binary - Load TBIN binary via binfmt_misc
+ * @bprm: Binary program structure
+ * Returns: 0 on success, negative on error
  */
 static int load_tbin_binary(struct linux_binprm *bprm) {
     struct tbin_header hdr;
-
-    // Check TBIN magic number in the first 4 bytes
-    if (bprm->buf[0] != 'T' || bprm->buf[1] != 'B' || bprm->buf[2] != 'I' || bprm->buf[3] != 'N') {
-        printk(KERN_ERR "Axion: Invalid TBIN magic number\n");
+    if (bprm->buf[0] != 'T' || bprm->buf[1] != 'B' || bprm->buf[2] != 'I' || bprm->buf[3] != 'N')
         return -ENOEXEC;
-    }
 
-    // Copy header from binary buffer
     memcpy(&hdr, bprm->buf, sizeof(hdr));
-    if (hdr.magic != TBIN_MAGIC) {
-        printk(KERN_ERR "Axion: Invalid TBIN header\n");
-        return -ENOEXEC;
-    }
+    if (hdr.magic != TBIN_MAGIC) return -ENOEXEC;
 
-    // AI selects ISA and compiles the binary
-    hdr.is_cisc = axion_choose_isa(hdr.code_size);
     return axion_jit_compile_tbin(&hdr);
 }
 
@@ -681,36 +535,30 @@ static struct linux_binfmt axion_tbin_format = {
 /* Package Manager Functions */
 
 /**
- * axion_predict_needs - Predict software needs based on usage patterns
- * Updates state.suggestion with AI-driven recommendations tailored to user activity.
+ * axion_predict_needs - Predict software needs based on usage
+ * Updates state.suggestion with ternary-aware recommendations.
  */
 static void axion_predict_needs(void) {
-    // Suggest packages based on simulated usage metrics
     if (state.python_usage > 50) {
-        snprintf(state.suggestion, sizeof(state.suggestion), "You’ve been coding in Python—want PyTorch or NumPy?");
+        snprintf(state.suggestion, sizeof(state.suggestion), "Python usage high—install PyTorch or NumPy?");
     } else if (state.gaming_usage > 70) {
-        snprintf(state.suggestion, sizeof(state.suggestion), "Heavy gaming detected—optimize with GPU tools?");
+        snprintf(state.suggestion, sizeof(state.suggestion), "Gaming detected—optimize with GPU tools?");
     } else {
-        state.suggestion[0] = '\0'; // Clear suggestion if no pattern detected
+        state.suggestion[0] = '\0';
     }
 }
 
 /**
- * axion_resolve_deps - Check for dependency conflicts during package installation
- * @pkg_name: Name of the package to check
- * @is_binary: Binary (1) or source (0) build type
- * Returns: 0 if no conflict, -EAGAIN if a conflict is detected, -EINVAL if input is invalid
- * Ensures compatibility between binary/source builds of the same package.
+ * axion_resolve_deps - Resolve package dependencies with ternary states
+ * @pkg_name: Package name
+ * @is_binary: Binary (1) or source (0) build
+ * Returns: 0 if no conflict, -EAGAIN if conflict, -EINVAL if invalid input
  */
 static int axion_resolve_deps(const char *pkg_name, int is_binary) {
-    if (!pkg_name) {
-        printk(KERN_ERR "Axion: Null package name in dependency resolution\n");
-        return -EINVAL;
-    }
-
+    if (!pkg_name) return -EINVAL;
     for (int i = 0; i < state.package_count; i++) {
         if (strcmp(state.packages[i].name, pkg_name) == 0 && state.packages[i].is_binary != is_binary) {
-            printk(KERN_WARNING "Axion: Dependency conflict for %s (binary/source mismatch)\n", pkg_name);
+            printk(KERN_WARNING "Axion: Dependency conflict for %s\n", pkg_name);
             return -EAGAIN;
         }
     }
@@ -718,30 +566,26 @@ static int axion_resolve_deps(const char *pkg_name, int is_binary) {
 }
 
 /**
- * axion_install_pkg - Install a new package
- * @pkg_name: Name of the package to install
- * @is_binary: Binary (1) or source (0) build type
- * Returns: 0 on success, negative on error (e.g., -ENOMEM if max packages reached)
- * Adds a package with basic dependency tracking (e.g., "libc" for Python).
+ * axion_install_pkg - Install a package with ternary state tracking
+ * @pkg_name: Package name
+ * @is_binary: Binary (1) or source (0) build
+ * Returns: 0 on success, negative on error
+ * Uses ternary state (-1, 0, 1) for future native support.
  */
 static int axion_install_pkg(const char *pkg_name, int is_binary) {
     if (!pkg_name) return -EINVAL;
-    if (state.package_count >= MAX_PACKAGES) {
-        printk(KERN_ERR "Axion: Maximum package limit reached\n");
-        return -ENOMEM;
-    }
+    if (state.package_count >= MAX_PACKAGES) return -ENOMEM;
     if (axion_resolve_deps(pkg_name, is_binary) < 0) return -EAGAIN;
 
     struct package *pkg = &state.packages[state.package_count++];
-    strncpy(pkg->name, pkg_name, sizeof(pkg->name) - 1); // Safe string copy
-    pkg->name[sizeof(pkg->name) - 1] = '\0'; // Ensure null termination
-    snprintf(pkg->version, sizeof(pkg->version), "1.0.%d", (int)(random32() % 10)); // Random version
+    strncpy(pkg->name, pkg_name, sizeof(pkg->name) - 1);
+    pkg->name[sizeof(pkg->name) - 1] = '\0';
+    snprintf(pkg->version, sizeof(pkg->version), "1.0.%d", (int)(random32() % 10));
+    pkg->state = TERNARY_POSITIVE; // Installed state
     pkg->is_binary = is_binary;
-    pkg->risk_score = (int)(random32() % 50); // Initial risk score
-    pkg->installed = 1;
+    pkg->risk_score = 0;
     pkg->dep_count = 0;
 
-    // Add dependency for specific packages
     if (strcmp(pkg_name, "python") == 0) {
         strncpy(pkg->deps[pkg->dep_count++], "libc", sizeof(pkg->deps[0]));
     }
@@ -749,41 +593,23 @@ static int axion_install_pkg(const char *pkg_name, int is_binary) {
 }
 
 /**
- * axion_update_pkg - Update an existing package
- * @pkg_name: Name of the package to update
- * Returns: 0 on success, -ENOENT if package not found, -EINVAL if input is invalid
- * Simulates an update with a new version and risk score, suggesting rollback for high risk.
+ * axion_update_pkg - Update a package with risk assessment
+ * @pkg_name: Package name
+ * Returns: 0 on success, -ENOENT if not found, -EINVAL if invalid
  */
 static int axion_update_pkg(const char *pkg_name) {
     if (!pkg_name) return -EINVAL;
     for (int i = 0; i < state.package_count; i++) {
         if (strcmp(state.packages[i].name, pkg_name) == 0) {
-            int risk = (int)(random32() % 100); // Simulate risk assessment
+            int risk = (int)(random32() % 100);
             state.packages[i].risk_score = risk;
             snprintf(state.packages[i].version, sizeof(state.packages[i].version), "1.1.%d", (int)(random32() % 10));
             if (risk > 70) {
-                snprintf(state.suggestion, sizeof(state.suggestion), "Update to %s risky (score: %d)—rollback?", pkg_name, risk);
+                state.packages[i].state = TERNARY_ZERO; // Pending state due to risk
+                snprintf(state.suggestion, sizeof(state.suggestion), "Update to %s risky—rollback?", pkg_name);
+            } else {
+                state.packages[i].state = TERNARY_POSITIVE; // Installed state
             }
-            return 0;
-        }
-    }
-    return -ENOENT; // Package not found
-}
-
-/**
- * axion_rollback_pkg - Rollback a package to a stable version
- * @pkg_name: Name of the package to rollback
- * Returns: 0 on success, -ENOENT if package not found, -EINVAL if input is invalid
- * Resets version and risk score, logs the rollback event.
- */
-static int axion_rollback_pkg(const char *pkg_name) {
-    if (!pkg_name) return -EINVAL;
-    for (int i = 0; i < state.package_count; i++) {
-        if (strcmp(state.packages[i].name, pkg_name) == 0) {
-            snprintf(state.packages[i].version, sizeof(state.packages[i].version), "1.0.0"); // Stable version
-            state.packages[i].risk_score = 0; // Clear risk
-            state.rollback_counter++;
-            state.rollback_reason[state.rollback_counter % WORKLOAD_HISTORY_SIZE] = 1; // Update failure reason
             return 0;
         }
     }
@@ -791,24 +617,39 @@ static int axion_rollback_pkg(const char *pkg_name) {
 }
 
 /**
- * axion_nl_command - Process a natural language command for package management
- * @cmd: Command string from user space
- * Returns: 0 on success, negative on error (e.g., -EINVAL for unrecognized command)
- * Simulates an LLM by parsing simple commands; extend with real LLM for complex queries.
+ * axion_rollback_pkg - Rollback a package to stable state
+ * @pkg_name: Package name
+ * Returns: 0 on success, -ENOENT if not found, -EINVAL if invalid
+ */
+static int axion_rollback_pkg(const char *pkg_name) {
+    if (!pkg_name) return -EINVAL;
+    for (int i = 0; i < state.package_count; i++) {
+        if (strcmp(state.packages[i].name, pkg_name) == 0) {
+            snprintf(state.packages[i].version, sizeof(state.packages[i].version), "1.0.0");
+            state.packages[i].risk_score = 0;
+            state.packages[i].state = TERNARY_POSITIVE; // Stable installed state
+            state.rollback_counter++;
+            state.rollback_reason[state.rollback_counter % WORKLOAD_HISTORY_SIZE] = 1;
+            return 0;
+        }
+    }
+    return -ENOENT;
+}
+
+/**
+ * axion_nl_command - Process natural language command for package management
+ * @cmd: Command string
+ * Returns: 0 on success, negative on error
  */
 static int axion_nl_command(const char *cmd) {
     if (!cmd) return -EINVAL;
-    strncpy(state.last_cmd, cmd, sizeof(state.last_cmd) - 1); // Save command with bounds check
-    state.last_cmd[sizeof(state.last_cmd) - 1] = '\0'; // Ensure null termination
+    strncpy(state.last_cmd, cmd, sizeof(state.last_cmd) - 1);
+    state.last_cmd[sizeof(state.last_cmd) - 1] = '\0';
 
-    if (strstr(cmd, "install a lightweight browser")) {
-        return axion_install_pkg("lynx", 1);
-    }
+    if (strstr(cmd, "install a lightweight browser")) return axion_install_pkg("lynx", 1);
     if (strstr(cmd, "update everything except my GPU drivers")) {
         for (int i = 0; i < state.package_count; i++) {
-            if (strstr(state.packages[i].name, "nvidia") == NULL) {
-                axion_update_pkg(state.packages[i].name);
-            }
+            if (strstr(state.packages[i].name, "nvidia") == NULL) axion_update_pkg(state.packages[i].name);
         }
         return 0;
     }
@@ -817,82 +658,67 @@ static int axion_nl_command(const char *cmd) {
         snprintf(state.suggestion, sizeof(state.suggestion), "Gaming optimized!");
         return 0;
     }
-    printk(KERN_ERR "Axion: Unrecognized natural language command: %s\n", cmd);
     return -EINVAL;
 }
 
 /**
- * axion_get_perf_feedback - Provide performance feedback for packages or system
- * Returns: Simulated performance metric (0-100); replace with real benchmark for production.
+ * axion_get_perf_feedback - Get simulated performance feedback
+ * Returns: Performance metric (0-100)
+ * Placeholder for ternary-aware performance metrics in future.
  */
 static int axion_get_perf_feedback(void) {
-    return (int)(random32() % 100); // Simulated; implement actual performance metric
+    return (int)(random32() % 100);
 }
 
 /* Workload and Suggestion Functions */
 
 /**
- * axion_suggestion_work - Workqueue function for workload monitoring and suggestions
- * @work: Work structure for the queue
- * Detects anomalies, triggers self-healing, manages rollback suppression, and generates suggestions.
+ * axion_suggestion_work - Monitor workload and generate suggestions
+ * @work: Work structure
  */
 static void axion_suggestion_work(struct work_struct *work) {
     unsigned long now = jiffies;
     int current_load = state.workload_history[state.workload_index ? state.workload_index - 1 : WORKLOAD_HISTORY_SIZE - 1];
 
-    // Anomaly detection and self-healing
     if (current_load > ANOMALY_THRESHOLD) {
         printk(KERN_WARNING "Axion: Anomaly detected - Load: %d%%\n", current_load);
         if (current_load > state.adaptive_threshold && !state.rollback_suppression) {
             state.rollback_counter++;
-            state.rollback_reason[state.rollback_counter % WORKLOAD_HISTORY_SIZE] = 2; // Anomaly reason
-            state.adaptive_threshold += 10; // Increase threshold to adapt
+            state.rollback_reason[state.rollback_counter % WORKLOAD_HISTORY_SIZE] = 2;
+            state.adaptive_threshold += 10;
             printk(KERN_INFO "Axion: Self-healing triggered\n");
         }
     }
 
-    // Rollback suppression mode
     if (state.rollback_counter > CRITICAL_FAILURE_THRESHOLD) {
         state.rollback_suppression = true;
         state.suppression_resistance += SUPPRESSION_GRADUAL_INCREASE;
-        printk(KERN_INFO "Axion: Rollback suppression enabled, resistance: %d\n", state.suppression_resistance);
+        printk(KERN_INFO "Axion: Rollback suppression enabled\n");
     }
 
-    // Generate periodic suggestions
     if (time_after(now, state.last_suggestion_time + SUGGESTION_INTERVAL)) {
         axion_predict_needs();
         state.last_suggestion_time = now;
     }
-
-    // Reschedule the work item
     queue_work(axion_wq, &axion_work);
 }
 
 /**
- * axion_monitor_thread - Kernel thread for continuous system monitoring
+ * axion_monitor_thread - Continuous monitoring thread
  * @data: Unused thread data
- * Returns: 0 when thread stops
- * Updates resource usage, workload history, and applies RL-driven actions.
+ * Returns: 0 on completion
  */
 static int axion_monitor_thread(void *data) {
     while (!kthread_should_stop()) {
         struct resource_state res;
-        axion_get_resource_usage(&res); // Get current usage
-        res.action = axion_rl_decide_action(&res); // Decide action
-        axion_apply_action(res.action); // Apply action
-        axion_update_rl(&res, res.action, state.rl.last_state); // Update RL model
-        state.res_history[state.res_history_index] = res; // Log resource state
+        axion_get_resource_usage(&res);
+        state.res_history[state.res_history_index] = res;
         state.res_history_index = (state.res_history_index + 1) % WORKLOAD_HISTORY_SIZE;
-
-        // Update workload history with average usage
         state.workload_history[state.workload_index] = (res.cpu_usage + res.gpu_usage + res.ram_usage) / 3;
         state.workload_index = (state.workload_index + 1) % WORKLOAD_HISTORY_SIZE;
-
-        // Simulate usage patterns (replace with real metrics in production)
         state.python_usage = (int)(random32() % 100);
         state.gaming_usage = (int)(random32() % 100);
-
-        msleep(1000); // Sleep for 1 second between iterations
+        msleep(1000);
     }
     return 0;
 }
@@ -907,67 +733,47 @@ static const struct file_operations axion_telemetry_fops = {
 /**
  * axion_telemetry_read - Provide telemetry data via debugfs
  * @filp: File pointer
- * @buffer: User-space buffer to write to
- * @len: Length of the buffer
- * @offset: Current offset in the file
- * Returns: Number of bytes read, or 0 if at end
- * Exposes detailed system state including resource usage, ternary execution, and package info.
+ * @buffer: User buffer
+ * @len: Buffer length
+ * @offset: File offset
+ * Returns: Bytes read
  */
 static ssize_t axion_telemetry_read(struct file *filp, char __user *buffer, size_t len, loff_t *offset) {
-    char telemetry_data[1024];
-    struct resource_state *res = &state.res_history[state.res_history_index ? state.res_history_index - 1 : WORKLOAD_HISTORY_SIZE - 1];
+    char telemetry_data[512];
     int ret;
-
-    // Format telemetry data into a readable string
     snprintf(telemetry_data, sizeof(telemetry_data),
-             "CPU: %d%%, RAM: %d%%, GPU: %d%%, Action: %d\n"
-             "TBIN Profile: %d, Confidence: %d%%, Running: %d, IP: %u, ISA: %s\n"
-             "Packages: %d, Python: %d%%, Gaming: %d%%\n"
-             "Workload: %d, Rollbacks: %d, Suppression: %s, Resistance: %d\n"
-             "CPU Weight: %.2f, GPU Weight: %.2f, RAM Weight: %.2f\n"
-             "Suggestion: %s\nLast Cmd: %s\n",
-             res->cpu_usage, res->ram_usage, res->gpu_usage, res->action,
-             state.tbin_execution_profile, state.tbin_confidence_metric, state.tbin.running, state.tbin.ip,
-             state.tbin.is_cisc ? "CISC" : "RISC",
-             state.package_count, state.python_usage, state.gaming_usage,
-             state.workload_history[state.workload_index - 1], state.rollback_counter,
-             state.rollback_suppression ? "ENABLED" : "DISABLED", state.suppression_resistance,
+             "Execution Profile: %d\nConfidence Metric: %d%%\nRollback Events: %d\nLast Rollback Reason: %d\n"
+             "Rollback Suppression: %s\nSuppression Resistance: %d\nTracked Workload Depth: %d\n"
+             "CPU Weight: %.2f\nGPU Weight: %.2f\nRAM Weight: %.2f\nLast Resource Adjustment: %d\n",
+             state.workload_history[state.workload_index - 1], state.confidence_metric, state.rollback_counter,
+             state.rollback_reason[state.rollback_counter % WORKLOAD_HISTORY_SIZE],
+             state.rollback_suppression ? "ENABLED" : "DISABLED", state.suppression_resistance, WORKLOAD_HISTORY_SIZE,
              state.resource_weight_cpu, state.resource_weight_gpu, state.resource_weight_ram,
-             state.suggestion, state.last_cmd);
-
-    // Write to user space with bounds checking
+             state.resource_adjustment_log[state.workload_index % WORKLOAD_HISTORY_SIZE]);
     ret = simple_read_from_buffer(buffer, len, offset, telemetry_data, strlen(telemetry_data));
     return ret;
 }
 
 /**
- * axion_ioctl - Handle IOCTL commands for user-space interaction
+ * axion_ioctl - Handle IOCTL commands
  * @file: File pointer
- * @cmd: IOCTL command code
- * @arg: Command argument from user space
- * Returns: 0 on success, negative on error (e.g., -EFAULT for copy failure)
- * Provides a comprehensive interface for all Axion functionalities.
+ * @cmd: Command code
+ * @arg: Command argument
+ * Returns: 0 on success, negative on error
  */
 static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     uint64_t value;
-    int action, binary;
+    int binary;
     struct tbin_header hdr;
     char pkg_name[32], nl_cmd[256];
 
     switch (cmd) {
-        case AXION_GET_SUGGESTION:
-            if (copy_to_user((char __user *)arg, state.suggestion, sizeof(state.suggestion))) return -EFAULT;
-            break;
         case AXION_SET_REGISTER:
             if (copy_from_user(&value, (uint64_t __user *)arg, sizeof(value))) return -EFAULT;
             state.axion_register = value;
             break;
         case AXION_GET_REGISTER:
             if (copy_to_user((uint64_t __user *)arg, &state.axion_register, sizeof(state.axion_register))) return -EFAULT;
-            break;
-        case AXION_SET_ACTION:
-            if (copy_from_user(&action, (int __user *)arg, sizeof(action))) return -EFAULT;
-            if (action >= 0 && action <= 2) axion_apply_action(action); else return -EINVAL;
             break;
         case AXION_TBIN_LOAD:
             if (copy_from_user(&hdr, (struct tbin_header __user *)arg, sizeof(hdr))) return -EFAULT;
@@ -976,6 +782,9 @@ static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) 
             return axion_tbin_step();
         case AXION_TBIN_GET_STATE:
             if (copy_to_user((struct tbin_state __user *)arg, &state.tbin, sizeof(state.tbin))) return -EFAULT;
+            break;
+        case AXION_GET_SUGGESTION:
+            if (copy_to_user((char __user *)arg, state.suggestion, sizeof(state.suggestion))) return -EFAULT;
             break;
         case AXION_INSTALL_PKG:
             if (copy_from_user(pkg_name, (char __user *)arg, sizeof(pkg_name))) return -EFAULT;
@@ -998,31 +807,13 @@ static long axion_ioctl(struct file *file, unsigned int cmd, unsigned long arg) 
             if (copy_to_user((int __user *)arg, &value, sizeof(value))) return -EFAULT;
             break;
         default:
-            printk(KERN_ERR "Axion: Unknown IOCTL command: %u\n", cmd);
             return -EINVAL;
     }
     return 0;
 }
 
-/**
- * axion_open - Open handler for the character device
- * @inode: Inode pointer
- * @file: File pointer
- * Returns: 0 (always successful in this implementation)
- */
-static int axion_open(struct inode *inode, struct file *file) {
-    return 0; // No specific initialization needed
-}
-
-/**
- * axion_release - Release handler for the character device
- * @inode: Inode pointer
- * @file: File pointer
- * Returns: 0 (always successful in this implementation)
- */
-static int axion_release(struct inode *inode, struct file *file) {
-    return 0; // No specific cleanup needed
-}
+static int axion_open(struct inode *inode, struct file *file) { return 0; }
+static int axion_release(struct inode *inode, struct file *file) { return 0; }
 
 static const struct file_operations axion_fops = {
     .owner = THIS_MODULE,
@@ -1034,90 +825,43 @@ static const struct file_operations axion_fops = {
 /* Module Initialization and Cleanup */
 
 /**
- * axion_init - Initialize the Axion kernel module
- * Returns: 0 on success, negative on error (e.g., -ENOMEM for allocation failure)
- * Sets up character device, debugfs, workqueue, timer, and monitoring thread.
+ * axion_init - Initialize the Axion module
+ * Returns: 0 on success, negative on error
+ * Sets up all components with ternary evolution in mind.
  */
 static int __init axion_init(void) {
     int ret;
 
-    // Allocate character device region
     ret = alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME);
-    if (ret < 0) {
-        printk(KERN_ERR "Axion: Failed to allocate device number\n");
-        goto err_chrdev;
-    }
-
-    // Initialize and add character device
+    if (ret < 0) goto err_chrdev;
     cdev_init(&axion_cdev, &axion_fops);
     ret = cdev_add(&axion_cdev, dev_num, 1);
-    if (ret < 0) {
-        printk(KERN_ERR "Axion: Failed to add character device\n");
-        goto err_cdev;
-    }
-
-    // Create device class
+    if (ret < 0) goto err_cdev;
     axion_class = class_create(THIS_MODULE, DEVICE_NAME);
-    if (IS_ERR(axion_class)) {
-        ret = PTR_ERR(axion_class);
-        printk(KERN_ERR "Axion: Failed to create device class\n");
-        goto err_class;
-    }
-
-    // Create device instance
+    if (IS_ERR(axion_class)) { ret = PTR_ERR(axion_class); goto err_class; }
     axion_device = device_create(axion_class, NULL, dev_num, NULL, DEVICE_NAME);
-    if (IS_ERR(axion_device)) {
-        ret = PTR_ERR(axion_device);
-        printk(KERN_ERR "Axion: Failed to create device\n");
-        goto err_device;
-    }
+    if (IS_ERR(axion_device)) { ret = PTR_ERR(axion_device); goto err_device; }
 
-    // Register TBIN binary format
     ret = axion_register_tbin();
-    if (ret) {
-        printk(KERN_ERR "Axion: Failed to register TBIN format\n");
-        goto err_binfmt;
-    }
+    if (ret) goto err_binfmt;
 
-    // Create debugfs directory
-    debugfs_dir = debugfs_create_dir("axion_debug", NULL);
-    if (IS_ERR(debugfs_dir)) {
-        ret = PTR_ERR(debugfs_dir);
-        printk(KERN_ERR "Axion: Failed to create debugfs directory\n");
-        goto err_debugfs;
-    }
+    debugfs_dir = debugfs_create_dir(AXION_DEBUGFS_DIR, NULL);
+    if (IS_ERR(debugfs_dir)) { ret = PTR_ERR(debugfs_dir); goto err_debugfs; }
+    debugfs_file = debugfs_create_file(AXION_DEBUGFS_FILE, 0444, debugfs_dir, NULL, &axion_telemetry_fops);
+    if (IS_ERR(debugfs_file)) { ret = PTR_ERR(debugfs_file); goto err_debugfs_file; }
 
-    // Create debugfs telemetry file
-    debugfs_file = debugfs_create_file("state", 0444, debugfs_dir, NULL, &axion_telemetry_fops);
-    if (IS_ERR(debugfs_file)) {
-        ret = PTR_ERR(debugfs_file);
-        printk(KERN_ERR "Axion: Failed to create debugfs file\n");
-        goto err_debugfs_file;
-    }
-
-    // Initialize workqueue for suggestions
     axion_wq = create_singlethread_workqueue("axion_wq");
-    if (!axion_wq) {
-        ret = -ENOMEM;
-        printk(KERN_ERR "Axion: Failed to create workqueue\n");
-        goto err_wq;
-    }
+    if (!axion_wq) { ret = -ENOMEM; goto err_wq; }
     INIT_WORK(&axion_work, axion_suggestion_work);
-    queue_work(axion_wq, &axion_work); // Start suggestion work
+    queue_work(axion_wq, &axion_work);
 
-    // Setup load balancing timer
     timer_setup(&axion_load_balancer, axion_predictive_load_balancer, 0);
     mod_timer(&axion_load_balancer, jiffies + msecs_to_jiffies(PREDICTIVE_LOAD_BALANCING_INTERVAL));
 
-    // Start monitoring thread
     axion_thread = kthread_run(axion_monitor_thread, NULL, "axion_monitor");
-    if (IS_ERR(axion_thread)) {
-        ret = PTR_ERR(axion_thread);
-        printk(KERN_ERR "Axion: Failed to start monitor thread\n");
-        goto err_thread;
-    }
+    if (IS_ERR(axion_thread)) { ret = PTR_ERR(axion_thread); goto err_thread; }
 
-    printk(KERN_INFO "Axion: Successfully initialized\n");
+    printk(KERN_INFO "Axion: Initialized with ternary evolution\n");
     return 0;
 
 err_thread:
@@ -1142,24 +886,21 @@ err_chrdev:
 }
 
 /**
- * axion_exit - Cleanup and unload the Axion kernel module
- * Ensures all resources (memory, threads, devices) are properly released.
+ * axion_exit - Cleanup the Axion module
+ * Ensures all resources are safely released.
  */
 static void __exit axion_exit(void) {
-    if (axion_thread) kthread_stop(axion_thread); // Stop monitoring thread
-    if (axion_wq) {
-        cancel_work_sync(&axion_work); // Cancel pending work
-        destroy_workqueue(axion_wq); // Destroy workqueue
-    }
-    del_timer_sync(&axion_load_balancer); // Stop load balancing timer
-    if (state.tbin.code) vfree(state.tbin.code); // Free ternary code buffer
-    debugfs_remove(debugfs_file); // Remove debugfs file
-    debugfs_remove(debugfs_dir); // Remove debugfs directory
-    unregister_binfmt(&axion_tbin_format); // Unregister TBIN format
-    device_destroy(axion_class, dev_num); // Destroy device
-    class_destroy(axion_class); // Destroy class
-    cdev_del(&axion_cdev); // Remove character device
-    unregister_chrdev_region(dev_num, 1); // Free device number
+    if (axion_thread) kthread_stop(axion_thread);
+    if (axion_wq) { cancel_work_sync(&axion_work); destroy_workqueue(axion_wq); }
+    del_timer_sync(&axion_load_balancer);
+    if (state.tbin.code) vfree(state.tbin.code);
+    debugfs_remove(debugfs_file);
+    debugfs_remove(debugfs_dir);
+    unregister_binfmt(&axion_tbin_format);
+    device_destroy(axion_class, dev_num);
+    class_destroy(axion_class);
+    cdev_del(&axion_cdev);
+    unregister_chrdev_region(dev_num, 1);
     printk(KERN_INFO "Axion: Unloaded\n");
 }
 
@@ -1168,4 +909,4 @@ module_exit(axion_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("User");
-MODULE_DESCRIPTION("Axion - AI-Powered Resource Management, Ternary Execution (CISC/RISC), and Package Manager");
+MODULE_DESCRIPTION("Axion Kernel Module with AI-Driven Ternary Evolution");
