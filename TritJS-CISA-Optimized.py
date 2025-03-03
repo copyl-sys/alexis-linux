@@ -1,579 +1,377 @@
 #!/usr/bin/env python3
 """
-***********************************************************************
-TritJS-CISA-Optimized: A Ternary Calculator with Advanced Features
-***********************************************************************
+Ternary System: TritJS-CISA-Optimized Utility with Kernel Module Interaction (Python Version)
+-----------------------------------------------------------------------------------------------
+This program implements an interactive ternary calculator with advanced arithmetic operations,
+a built-in help system, and an interface to interact with the Axion kernel module via IOCTL calls.
+Our IOCTL constants have been updated to match our unified kernel source definitions.
 
-This Python program has been optimized for:
-  - Improved memory management and safe dynamic reallocation using Python's
-    native big integers.
-  - Faster base conversion by grouping four base‑3 digits at a time.
-  - Efficient multiplication using a Karatsuba algorithm with caching.
-  - Enhanced security with secure audit logging (with file locking) and secure
-    state management using OpenSSL (invoked via subprocess) for AES‑256‑CBC encryption.
-  - Real-time intrusion detection via a background monitoring thread.
-  - Extended scripting and automation using Python's native capabilities.
-  - A simple ASCII menu system for saving and opening states.
-  - Build automation through an external Makefile/CI‑CD pipeline.
-
-== Features ==
-• Arithmetic: add, sub, mul, div, pow, fact  
-• Scientific: sqrt, log3, sin, cos, tan, pi (via double conversion)  
-• Conversions: bin2tri, tri2bin (optimized conversion routines), balanced/unbalanced ternary parsing  
-• Logical: and, or, not, xor (digit‑wise operations)  
-• State Management: save and load session states (encrypted using OpenSSL AES‑256‑CBC)
-• Security: secure audit logging (with file locking) and intrusion detection  
-• Scripting & Variables: command interpreter with support for state management, history, and interface functions  
-• Interface: simple ASCII menu system to manage state files and view history/clear state
-• Build Automation: external Makefile & CI‑CD pipeline (not shown) automate builds, tests, and deployment.
-
-== Usage ==
-    ./tritjs_cisa_optimized.py
-
-== Integration Test Cases ==
-On startup, the program runs tests for:
-    - Encryption/decryption round-trip via OpenSSL.
-    - Command interpreter and scripted function execution.
-    - Intrusion detection simulation.
-
-== Prerequisites ==
-    OpenSSL must be installed and accessible via the command line.
-    (This script uses the 'openssl' command via subprocess for AES‑256‑CBC encryption/decryption.)
-
-== License ==
-GNU General Public License (GPL)
-***********************************************************************
+IMPORTANT:
+  - The Axion kernel module must be loaded, and its device file (default: /dev/axion_opt) must exist.
+  - IOCTL command values are computed using Linux's _IOC macros and now align with our source.
+  
+Features:
+  • Ternary arithmetic: conversion, addition, subtraction, multiplication, division, factorial, exponentiation.
+  • Interactive help (type "help" for a full command list).
+  • Module interaction:
+      - Get/set register, load TBIN binary, execute a TBIN step, retrieve TBIN state.
+      - Package management and natural language commands.
+  • Uses Python's fcntl and struct modules to perform IOCTL calls.
+  
+Usage:
+  - Run: ./tritjs_module_utility.py
+  - Type "help" at the prompt for details.
 """
 
-import os, sys, time, math, threading, json, fcntl, subprocess, tempfile
+import os
+import sys
+import fcntl
+import struct
+import math
 
-try:
-    import resource  # For memory usage on Linux/macOS
-except ImportError:
-    resource = None
+# -------------------------------------------------------------------
+# Ternary Conversion Functions
+# -------------------------------------------------------------------
+def ternary_to_int(ternary_str):
+    """
+    Convert an unbalanced ternary string (base-3) to its integer value.
+    """
+    s = ternary_str.strip()
+    if not s:
+        raise ValueError("Empty string is not a valid ternary number.")
+    negative = s[0] == '-'
+    if negative:
+        s = s[1:]
+    if any(ch not in '012' for ch in s):
+        raise ValueError("Invalid ternary digit found. Only 0, 1, 2 are allowed.")
+    return -int(s, 3) if negative else int(s, 3)
 
-# Global configuration and audit logging
-VERSION = "2.0-upgrade-optimized"
-AUDIT_LOG_PATH = "/var/log/tritjs_cisa.log"
-OPERATION_STEPS = 0
-INTRUSION_ALERT = False
-
-# Global command history and variable storage (for demonstration)
-history = []
-variables = [None] * 26  # Placeholder for variables A-Z
-
-def init_audit_log():
-    """Initialize the audit log with file locking."""
-    try:
-        log_file = open(AUDIT_LOG_PATH, "a")
-        fcntl.flock(log_file.fileno(), fcntl.LOCK_EX)
-        return log_file
-    except Exception as e:
-        sys.stderr.write(f"Audit log init failed: {e}\n")
-        return sys.stderr
-
-AUDIT_LOG = init_audit_log()
-
-def log_error(err_code, context):
-    """Write an error to the audit log with a timestamp."""
-    msg = f"[{time.ctime()}] ERROR {err_code}: {context}\n"
-    AUDIT_LOG.write(msg)
-    AUDIT_LOG.flush()
-
-# --- Ternary Conversion Functions ---
 def int_to_ternary(n):
+    """
+    Convert an integer to its unbalanced ternary (base-3) string representation.
+    """
     if n == 0:
         return "0"
-    sign = "-" if n < 0 else ""
+    negative = n < 0
     n = abs(n)
     digits = []
     while n:
         digits.append(str(n % 3))
         n //= 3
-    return sign + "".join(reversed(digits))
+    digits.reverse()
+    result = "".join(digits)
+    return "-" + result if negative else result
 
-def ternary_to_int(s):
-    try:
-        if s[0] == "-":
-            return -int(s[1:], 3)
-        return int(s, 3)
-    except Exception as e:
-        log_error(2, f"Invalid ternary input: {s}")
-        raise ValueError("Invalid ternary string") from e
+# -------------------------------------------------------------------
+# Arithmetic Operations
+# -------------------------------------------------------------------
+def add_ternary(a, b):
+    return int_to_ternary(ternary_to_int(a) + ternary_to_int(b))
 
-def balanced_to_unbalanced(s):
-    mapping = {'-': '0', '0': '1', '+': '2'}
-    return "".join(mapping.get(ch, '') for ch in s)
+def subtract_ternary(a, b):
+    return int_to_ternary(ternary_to_int(a) - ternary_to_int(b))
 
-def unbalanced_to_balanced(s):
-    mapping = {'0': '-', '1': '0', '2': '+'}
-    return "".join(mapping.get(ch, '') for ch in s)
+def multiply_ternary(a, b):
+    return int_to_ternary(ternary_to_int(a) * ternary_to_int(b))
 
-# --- Arithmetic Operations ---
-def t_add(a_str, b_str):
-    return int_to_ternary(ternary_to_int(a_str) + ternary_to_int(b_str))
+def divide_ternary(a, b):
+    numerator = ternary_to_int(a)
+    denominator = ternary_to_int(b)
+    if denominator == 0:
+        raise ZeroDivisionError("Division by zero is not allowed.")
+    quotient, remainder = divmod(numerator, denominator)
+    return int_to_ternary(quotient), int_to_ternary(remainder)
 
-def t_sub(a_str, b_str):
-    return int_to_ternary(ternary_to_int(a_str) - ternary_to_int(b_str))
+def factorial_ternary(a):
+    n = ternary_to_int(a)
+    if n < 0:
+        raise ValueError("Factorial is not defined for negative numbers.")
+    return int_to_ternary(math.factorial(n))
 
-def t_mul(a_str, b_str):
-    return int_to_ternary(ternary_to_int(a_str) * ternary_to_int(b_str))
+def power_ternary(base, exponent):
+    exp_val = ternary_to_int(exponent)
+    if exp_val < 0:
+        raise ValueError("Negative exponents are not supported.")
+    return int_to_ternary(pow(ternary_to_int(base), exp_val))
 
-def t_div(a_str, b_str):
-    a, b = ternary_to_int(a_str), ternary_to_int(b_str)
-    if b == 0:
-        log_error(3, "Division by zero")
-        raise ZeroDivisionError("Division by zero")
-    q, r = a // b, a % b
-    return int_to_ternary(q), int_to_ternary(r)
+# -------------------------------------------------------------------
+# Axion Module Interface using IOCTL
+# -------------------------------------------------------------------
+class AxionModuleInterface:
+    """
+    Provides an interface to the Axion kernel module using IOCTL calls.
+    Adjusted IOCTL constants now align with our kernel module's definitions.
+    Device file is assumed to be "/dev/axion_opt".
+    """
 
-def t_pow(a_str, b_str):
-    return int_to_ternary(pow(ternary_to_int(a_str), ternary_to_int(b_str)))
-
-def t_fact(a_str):
-    a = ternary_to_int(a_str)
-    if a < 0:
-        log_error(6, "Negative input in factorial")
-        raise ValueError("Negative input")
-    if a > 20:
-        log_error(4, "Factorial overflow")
-        raise OverflowError("Input too large")
-    return int_to_ternary(math.factorial(a))
-
-# --- Scientific Functions ---
-def t_sqrt(a_str):
-    a = ternary_to_int(a_str)
-    if a < 0:
-        raise ValueError("Cannot take sqrt of negative number")
-    return int_to_ternary(int(math.sqrt(a)))
-
-def t_log3(a_str):
-    a = ternary_to_int(a_str)
-    if a <= 0:
-        raise ValueError("Logarithm undefined for non-positive numbers")
-    return int_to_ternary(int(math.log(a, 3)))
-
-def t_sin(a_str):
-    return int_to_ternary(int(math.sin(ternary_to_int(a_str)) * 1000))
-
-def t_cos(a_str):
-    return int_to_ternary(int(math.cos(ternary_to_int(a_str)) * 1000))
-
-def t_tan(a_str):
-    return int_to_ternary(int(math.tan(ternary_to_int(a_str)) * 1000))
-
-def t_pi():
-    return int_to_ternary(int(3.141592653589793 * 1000))
-
-# --- Ternary Logical Operations ---
-def t_logic_and(a_str, b_str):
-    a_str = a_str.zfill(max(len(a_str), len(b_str)))
-    b_str = b_str.zfill(max(len(a_str), len(b_str)))
-    return "".join(str(min(int(x), int(y))) for x, y in zip(a_str, b_str))
-
-def t_logic_or(a_str, b_str):
-    a_str = a_str.zfill(max(len(a_str), len(b_str)))
-    b_str = b_str.zfill(max(len(a_str), len(b_str)))
-    return "".join(str(max(int(x), int(y))) for x, y in zip(a_str, b_str))
-
-def t_logic_not(a_str):
-    return "".join(str(2 - int(x)) for x in a_str)
-
-def t_logic_xor(a_str, b_str):
-    a_str = a_str.zfill(max(len(a_str), len(b_str)))
-    b_str = b_str.zfill(max(len(a_str), len(b_str)))
-    return "".join(str((int(x) + int(y)) % 3) for x, y in zip(a_str, b_str))
-
-# --- State Management using OpenSSL (AES-256-CBC) ---
-KEY = b'This_is_a_32byte_key_for_AES256!!!'
-NONCE_SIZE = 16
-
-def encrypt_data(plaintext):
-    key_hex = KEY.hex()
-    iv = os.urandom(NONCE_SIZE)
-    iv_hex = iv.hex()
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_in:
-        tmp_in.write(plaintext.encode('utf-8'))
-        tmp_in.flush()
-        tmp_in_name = tmp_in.name
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_out:
-        tmp_out_name = tmp_out.name
-    cmd = [
-        "openssl", "enc", "-aes-256-cbc", "-e",
-        "-K", key_hex, "-iv", iv_hex, "-nosalt",
-        "-in", tmp_in_name, "-out", tmp_out_name
-    ]
-    subprocess.run(cmd, check=True)
-    with open(tmp_out_name, "rb") as f:
-        ciphertext = f.read()
-    os.remove(tmp_in_name)
-    os.remove(tmp_out_name)
-    return iv + ciphertext
-
-def decrypt_data(data):
-    iv = data[:NONCE_SIZE]
-    ciphertext = data[NONCE_SIZE:]
-    key_hex = KEY.hex()
-    iv_hex = iv.hex()
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_in:
-        tmp_in.write(ciphertext)
-        tmp_in.flush()
-        tmp_in_name = tmp_in.name
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_out:
-        tmp_out_name = tmp_out.name
-    cmd = [
-        "openssl", "enc", "-aes-256-cbc", "-d",
-        "-K", key_hex, "-iv", iv_hex, "-nosalt",
-        "-in", tmp_in_name, "-out", tmp_out_name
-    ]
-    subprocess.run(cmd, check=True)
-    with open(tmp_out_name, "rb") as f:
-        plaintext = f.read()
-    os.remove(tmp_in_name)
-    os.remove(tmp_out_name)
-    return plaintext.decode('utf-8')
-
-def save_state(filename, state_dict):
-    state_json = json.dumps(state_dict)
-    enc = encrypt_data(state_json)
-    with open(filename, "wb") as f:
-        f.write(enc)
-    return "State saved successfully"
-
-def load_state(filename):
-    with open(filename, "rb") as f:
-        data = f.read()
-    state_json = decrypt_data(data)
-    return json.loads(state_json)
-
-# --- Intrusion Detection ---
-def intrusion_monitor():
-    global INTRUSION_ALERT, OPERATION_STEPS
-    while True:
-        INTRUSION_ALERT = OPERATION_STEPS > 1000
-        time.sleep(5)
-
-def start_intrusion_monitor():
-    thread = threading.Thread(target=intrusion_monitor, daemon=True)
-    thread.start()
-
-# --- UI Helpers for Status Bar ---
-def update_status_bar(stdscr):
-    mem_usage = "N/A"
-    if resource:
-        try:
-            usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            mem_usage = f"{usage} KB"
-        except Exception:
-            mem_usage = "N/A"
-    status = f"Memory: {mem_usage} | Steps: {OPERATION_STEPS}"
-    stdscr.addstr(0, 0, status)
-    stdscr.clrtoeol()
-    stdscr.refresh()
-
-def init_curses():
-    stdscr = curses.initscr()
-    curses.noecho()
-    curses.cbreak()
-    stdscr.keypad(True)
-    return stdscr
-
-def end_curses(stdscr):
-    curses.nocbreak()
-    stdscr.keypad(False)
-    curses.echo()
-    curses.endwin()
-
-# --- Curses-based UI with ASCII Menu ---
-def ascii_menu():
-    menu = (
-        "\n============================\n"
-        "TritJS-CISA-Optimized Menu\n"
-        "============================\n"
-        "1. Save State\n"
-        "2. Load State\n"
-        "3. Show History\n"
-        "4. Clear History/Variables\n"
-        "5. Help\n"
-        "6. Exit Menu\n"
-        "============================\n"
-        "Enter choice (1-6): "
-    )
-    return menu
-
-def process_menu_choice(choice):
-    if choice == "1":
-        filename = input("Enter filename to save state: ")
-        state = {"history": history, "variables": [v for v in variables if v]}
-        print(save_state(filename, state))
-    elif choice == "2":
-        filename = input("Enter filename to load state: ")
-        state = load_state(filename)
-        print("State loaded:", state)
-    elif choice == "3":
-        print("Command History:")
-        for cmd_entry in history:
-            print(cmd_entry)
-    elif choice == "4":
-        print(c_clear())
-    elif choice == "5":
-        print(c_help())
-    elif choice == "6":
-        print("Exiting menu.")
-    else:
-        print("Invalid choice.")
-
-def curses_ui():
-    stdscr = init_curses()
-    try:
-        while True:
-            update_status_bar(stdscr)
-            stdscr.addstr(1, 0, "Enter command (or type 'menu' for options, 'q' to quit):")
-            stdscr.clrtoeol()
-            stdscr.refresh()
-            cmd = stdscr.getstr(2, 0, 80).decode('utf-8').strip()
-            if cmd.lower() == "q":
-                break
-            if cmd.lower() == "menu":
-                stdscr.clear()
-                stdscr.addstr(0, 0, ascii_menu())
-                stdscr.refresh()
-                choice = stdscr.getstr(7, 0, 2).decode('utf-8').strip()
-                process_menu_choice(choice)
-                stdscr.clear()
-                continue
-            history.append(cmd)
-            try:
-                parts = cmd.split()
-                if parts[0] == "add":
-                    result = t_add(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "sub":
-                    result = t_sub(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "mul":
-                    result = t_mul(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "div":
-                    q, r = t_div(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Quotient: {q}, Remainder: {r}\n")
-                elif parts[0] == "pow":
-                    result = t_pow(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "fact":
-                    result = t_fact(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "sqrt":
-                    result = t_sqrt(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "log3":
-                    result = t_log3(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "sin":
-                    result = t_sin(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "cos":
-                    result = t_cos(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "tan":
-                    result = t_tan(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "pi":
-                    result = t_pi()
-                    stdscr.addstr(4, 0, f"pi: {result}\n")
-                elif parts[0] == "bin2tri":
-                    result = int_to_ternary(int(parts[1]))
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "tri2bin":
-                    result = str(ternary_to_int(parts[1]))
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "and":
-                    result = t_logic_and(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "or":
-                    result = t_logic_or(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "not":
-                    result = t_logic_not(parts[1])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                elif parts[0] == "xor":
-                    result = t_logic_xor(parts[1], parts[2])
-                    stdscr.addstr(4, 0, f"Result: {result}\n")
-                else:
-                    stdscr.addstr(4, 0, f"Unknown command: {cmd}\n")
-            except Exception as e:
-                stdscr.addstr(4, 0, f"Error: {e}\n")
-            stdscr.clrtoeol()
-            stdscr.refresh()
-    finally:
-        end_curses(stdscr)
-
-# --- Lua Integration ---
-def run_lua_script(script):
-    try:
-        exec(script, globals())
-    except Exception as e:
-        print(f"Script error: {e}")
-
-# --- Additional Interface Helpers ---
-def c_get_operation_steps():
-    return OPERATION_STEPS
-
-def c_clear():
-    global history, variables
-    history.clear()
-    for i in range(len(variables)):
-        variables[i] = None
-    return "History and variables cleared"
-
-def c_help():
-    return (
-        "Available commands:\n"
-        "  c_add(a, b)       - Adds two ternary numbers\n"
-        "  c_sub(a, b)       - Subtracts b from a\n"
-        "  c_mul(a, b)       - Multiplies two ternary numbers\n"
-        "  c_div(a, b)       - Divides a by b (returns quotient and remainder)\n"
-        "  c_sqrt(a)         - Square root of a\n"
-        "  c_log3(a)         - Base-3 logarithm of a\n"
-        "  c_sin(a)          - Sine of a\n"
-        "  c_cos(a)          - Cosine of a\n"
-        "  c_tan(a)          - Tangent of a\n"
-        "  c_pi()            - Returns pi in ternary\n"
-        "  c_bin2tri(n)      - Converts binary number n to ternary\n"
-        "  c_tri2bin(s)      - Converts ternary string s to binary\n"
-        "  c_and(a, b)       - Logical AND of two ternary numbers\n"
-        "  c_or(a, b)        - Logical OR\n"
-        "  c_not(a)          - Logical NOT\n"
-        "  c_xor(a, b)       - Logical XOR\n"
-        "  c_save_state(filename) - Saves current state\n"
-        "  c_load_state(filename) - Loads state from file\n"
-        "  c_clear()         - Clears history and variables\n"
-        "  c_get_operation_steps() - Returns current operation count\n"
-    )
-
-# --- Define Aliases for Lua Integration ---
-c_add = t_add
-c_sub = t_sub
-c_mul = t_mul
-def c_div(a, b):
-    q, r = t_div(a, b)
-    return f"Quotient: {q}, Remainder: {r}"
-c_pow = t_pow
-c_fact = t_fact
-c_sqrt = t_sqrt
-c_log3 = t_log3
-c_sin = t_sin
-c_cos = t_cos
-c_tan = t_tan
-c_pi = t_pi
-c_bin2tri = lambda n: int_to_ternary(int(n))
-c_tri2bin = ternary_to_int
-c_and = t_logic_and
-c_or = t_logic_or
-c_not = t_logic_not
-c_xor = t_logic_xor
-
-# --- Integration Test Cases ---
-def run_integration_tests():
-    plaintext = "Test string for encryption"
-    enc = encrypt_data(plaintext)
-    dec = decrypt_data(enc)
-    print("Crypto Test:", dec)
+    # Updated IOCTL command constants computed from our unified source:
+    IOCTL_SET_REGISTER      = 0x40086101  # _IOW('a', 1, uint64_t)
+    IOCTL_GET_REGISTER      = 0x80086102  # _IOR('a', 2, uint64_t)
+    IOCTL_TBIN_LOAD         = 0x40016103  # _IOW('a', 3, struct tbin_header) where sizeof(header)==16
+    IOCTL_TBIN_STEP         = 0x6104      # _IO('a', 4) with no size (0 bytes)
+    IOCTL_TBIN_GET_STATE    = 0x802F6105  # _IOR('a', 5, struct tbin_state) where size==47 bytes
+    IOCTL_GET_SUGGESTION    = 0x81006106  # _IOR('a', 6, char[256])
+    IOCTL_INSTALL_PKG       = 0x40206107  # _IOW('a', 7, char[32])
+    IOCTL_UPDATE_PKG        = 0x40206108  # _IOW('a', 8, char[32])
+    IOCTL_SET_BINARY        = 0x40046109  # _IOW('a', 9, int)
+    IOCTL_ROLLBACK          = 0x4020610A  # _IOW('a', 10, char[32])
+    IOCTL_NL_COMMAND        = 0x4100610B  # _IOW('a', 11, char[256])
+    IOCTL_GET_PERF_FEEDBACK = 0x8004610C  # _IOR('a', 12, int)
     
-    lua_script = "print('Lua Test: c_add(102, 210) =', c_add('102', '210'))"
-    run_lua_script(lua_script)
-    
-    global OPERATION_STEPS, INTRUSION_ALERT
-    OPERATION_STEPS = 150
-    time.sleep(6)
-    if INTRUSION_ALERT:
-        print("Intrusion Detection Test: Alert triggered!")
-    else:
-        print("Intrusion Detection Test: No alert.")
-
-# --- Main Function ---
-def main():
-    print(f"TritJS-CISA-Optimized v{VERSION}")
-    start_intrusion_monitor()
-    run_integration_tests()
-    print("Starting interactive mode (type 'menu' for options, 'exit' to quit):")
-    while True:
+    def __init__(self, device_path="/dev/axion_opt"):
+        """
+        Open the device file.
+        """
         try:
-            cmd = input("> ")
-            if cmd.lower() in ["exit", "quit"]:
-                break
-            if cmd.lower() == "menu":
-                print(ascii_menu())
-                choice = input("Choice: ").strip()
-                process_menu_choice(choice)
-                continue
-            history.append(cmd)
-            global OPERATION_STEPS
-            OPERATION_STEPS += 1
-            parts = cmd.split()
-            if not parts:
-                continue
-            # Process arithmetic, scientific, logical commands based on keyword
-            if parts[0] == "add":
-                print("Result:", t_add(parts[1], parts[2]))
-            elif parts[0] == "sub":
-                print("Result:", t_sub(parts[1], parts[2]))
-            elif parts[0] == "mul":
-                print("Result:", t_mul(parts[1], parts[2]))
-            elif parts[0] == "div":
-                q, r = t_div(parts[1], parts[2])
-                print("Quotient:", q, "Remainder:", r)
-            elif parts[0] == "pow":
-                print("Result:", t_pow(parts[1], parts[2]))
-            elif parts[0] == "fact":
-                print("Result:", t_fact(parts[1]))
-            elif parts[0] == "sqrt":
-                print("Result:", t_sqrt(parts[1]))
-            elif parts[0] == "log3":
-                print("Result:", t_log3(parts[1]))
-            elif parts[0] == "sin":
-                print("Result:", t_sin(parts[1]))
-            elif parts[0] == "cos":
-                print("Result:", t_cos(parts[1]))
-            elif parts[0] == "tan":
-                print("Result:", t_tan(parts[1]))
-            elif parts[0] == "pi":
-                print("pi:", t_pi())
-            elif parts[0] == "bin2tri":
-                print("Result:", int_to_ternary(int(parts[1])))
-            elif parts[0] == "tri2bin":
-                print("Result:", ternary_to_int(parts[1]))
-            elif parts[0] == "and":
-                print("Result:", t_logic_and(parts[1], parts[2]))
-            elif parts[0] == "or":
-                print("Result:", t_logic_or(parts[1], parts[2]))
-            elif parts[0] == "not":
-                print("Result:", t_logic_not(parts[1]))
-            elif parts[0] == "xor":
-                print("Result:", t_logic_xor(parts[1], parts[2]))
-            elif parts[0] == "save":
-                state = {"history": history, "variables": [v for v in variables if v]}
-                print(save_state(parts[1], state))
-            elif parts[0] == "load":
-                state = load_state(parts[1])
-                print("State loaded:", state)
-            elif parts[0] == "clear":
-                print(c_clear())
-            elif parts[0] == "history":
-                print("Command History:")
-                for cmd_entry in history:
-                    print(cmd_entry)
-            elif parts[0] == "help":
-                print(c_help())
-            elif parts[0] == "runlua":
-                script = " ".join(parts[1:])
-                run_lua_script(script)
-            else:
-                print("Unknown command")
+            self.fd = os.open(device_path, os.O_RDWR)
         except Exception as e:
-            print("Error:", e)
-            
+            print(f"Error opening {device_path}: {e}")
+            self.fd = None
+    
+    def close(self):
+        """
+        Close the device file.
+        """
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+    
+    def get_register(self):
+        """
+        Get the module's register (uint64_t).
+        """
+        if self.fd is None:
+            return None
+        buf = bytearray(8)
+        fcntl.ioctl(self.fd, self.IOCTL_GET_REGISTER, buf, True)
+        return struct.unpack("Q", buf)[0]
+    
+    def set_register(self, value):
+        """
+        Set the module's register to 'value' (uint64_t).
+        """
+        if self.fd is None:
+            return
+        buf = struct.pack("Q", value)
+        fcntl.ioctl(self.fd, self.IOCTL_SET_REGISTER, buf)
+    
+    def tbin_load(self, tbin_header):
+        """
+        Load a TBIN binary. tbin_header is a tuple of 4 integers:
+        (magic, entry_point, code_size, data_size).
+        """
+        if self.fd is None:
+            return
+        buf = struct.pack("IIII", *tbin_header)
+        fcntl.ioctl(self.fd, self.IOCTL_TBIN_LOAD, buf)
+    
+    def tbin_step(self):
+        """
+        Execute one step of TBIN execution.
+        """
+        if self.fd is None:
+            return
+        fcntl.ioctl(self.fd, self.IOCTL_TBIN_STEP)
+    
+    def get_tbin_state(self):
+        """
+        Get the current TBIN state.
+        Assumes a structure of 47 bytes: 3 bytes for registers, 32 bytes for memory,
+        4 bytes for ip, 4 bytes for code_size, and 4 bytes for running.
+        """
+        if self.fd is None:
+            return None
+        buf = bytearray(47)
+        fcntl.ioctl(self.fd, self.IOCTL_TBIN_GET_STATE, buf, True)
+        reg = struct.unpack("3b", buf[0:3])
+        memory = list(buf[3:35])
+        ip, code_size, running = struct.unpack("III", buf[35:47])
+        return {"reg": reg, "memory": memory, "ip": ip, "code_size": code_size, "running": running}
+    
+    def get_suggestion(self):
+        """
+        Retrieve the AI suggestion string from the module.
+        """
+        if self.fd is None:
+            return ""
+        buf = bytearray(256)
+        fcntl.ioctl(self.fd, self.IOCTL_GET_SUGGESTION, buf, True)
+        return buf.split(b'\x00', 1)[0].decode('utf-8')
+    
+    def install_pkg(self, pkg_name):
+        """
+        Send an install package command for pkg_name (max 32 bytes).
+        """
+        if self.fd is None:
+            return
+        buf = pkg_name.encode('utf-8').ljust(32, b'\x00')
+        fcntl.ioctl(self.fd, self.IOCTL_INSTALL_PKG, buf)
+    
+    def update_pkg(self, pkg_name):
+        """
+        Send an update package command for pkg_name.
+        """
+        if self.fd is None:
+            return
+        buf = pkg_name.encode('utf-8').ljust(32, b'\x00')
+        fcntl.ioctl(self.fd, self.IOCTL_UPDATE_PKG, buf)
+    
+    def rollback_pkg(self, pkg_name):
+        """
+        Send a rollback package command for pkg_name.
+        """
+        if self.fd is None:
+            return
+        buf = pkg_name.encode('utf-8').ljust(32, b'\x00')
+        fcntl.ioctl(self.fd, self.IOCTL_ROLLBACK, buf)
+    
+    def nl_command(self, cmd):
+        """
+        Send a natural language command to the module.
+        """
+        if self.fd is None:
+            return
+        buf = cmd.encode('utf-8').ljust(256, b'\x00')
+        fcntl.ioctl(self.fd, self.IOCTL_NL_COMMAND, buf)
+    
+    def get_perf_feedback(self):
+        """
+        Retrieve the performance feedback metric (uint32_t).
+        """
+        if self.fd is None:
+            return None
+        buf = bytearray(4)
+        fcntl.ioctl(self.fd, self.IOCTL_GET_PERF_FEEDBACK, buf, True)
+        return struct.unpack("I", buf)[0]
+
+# -------------------------------------------------------------------
+# Help System and Command Processing
+# -------------------------------------------------------------------
+def print_help():
+    help_msg = """
+--- TritJS-CISA-Optimized Utility Help ---
+Arithmetic Commands:
+  to_int <ternary>         : Convert a ternary string to an integer.
+  to_ternary <int>         : Convert an integer to a ternary string.
+  add <a> <b>              : Add two ternary numbers.
+  sub <a> <b>              : Subtract second number from first.
+  mul <a> <b>              : Multiply two ternary numbers.
+  div <a> <b>              : Divide first by second (quotient and remainder).
+  fact <a>               : Compute factorial of a ternary number.
+  pow <base> <exp>         : Compute base raised to exponent.
+  
+Module Commands (requires Axion module):
+  mod_get_reg            : Get the module's register value.
+  mod_set_reg <value>    : Set the module's register to <value>.
+  mod_tbin_load <magic> <entry> <code_size> <data_size>
+                         : Load a TBIN binary into the module.
+  mod_tbin_step          : Execute one TBIN step.
+  mod_get_state          : Retrieve current TBIN execution state.
+  mod_get_suggest        : Get AI-generated suggestion from the module.
+  mod_install <pkg>      : Install a package.
+  mod_update <pkg>       : Update a package.
+  mod_rollback <pkg>     : Rollback a package.
+  mod_nl <command>       : Send a natural language command to the module.
+  mod_get_perf           : Get performance feedback metric.
+  
+General:
+  help                   : Display this help message.
+  exit                   : Exit the utility.
+------------------------------------------------------
+"""
+    print(help_msg)
+
+def process_command(cmd_line, axion_iface):
+    tokens = cmd_line.strip().split()
+    if not tokens:
+        return
+    cmd = tokens[0].lower()
+    try:
+        if cmd == "help":
+            print_help()
+        elif cmd == "exit":
+            sys.exit(0)
+        elif cmd == "to_int" and len(tokens) == 2:
+            print("Integer value:", ternary_to_int(tokens[1]))
+        elif cmd == "to_ternary" and len(tokens) == 2:
+            print("Ternary representation:", int_to_ternary(int(tokens[1])))
+        elif cmd == "add" and len(tokens) == 3:
+            print("Result:", add_ternary(tokens[1], tokens[2]))
+        elif cmd == "sub" and len(tokens) == 3:
+            print("Result:", subtract_ternary(tokens[1], tokens[2]))
+        elif cmd == "mul" and len(tokens) == 3:
+            print("Result:", multiply_ternary(tokens[1], tokens[2]))
+        elif cmd == "div" and len(tokens) == 3:
+            q, r = divide_ternary(tokens[1], tokens[2])
+            print("Quotient:", q)
+            print("Remainder:", r)
+        elif cmd == "fact" and len(tokens) == 2:
+            print("Factorial:", factorial_ternary(tokens[1]))
+        elif cmd == "pow" and len(tokens) == 3:
+            print("Result:", power_ternary(tokens[1], tokens[2]))
+        # Module commands:
+        elif cmd == "mod_get_reg":
+            reg_val = axion_iface.get_register()
+            print("Module Register:", reg_val)
+        elif cmd == "mod_set_reg" and len(tokens) == 2:
+            val = int(tokens[1])
+            axion_iface.set_register(val)
+            print("Module register set to", val)
+        elif cmd == "mod_tbin_load" and len(tokens) == 5:
+            hdr = tuple(int(x) for x in tokens[1:5])
+            axion_iface.tbin_load(hdr)
+            print("TBIN loaded into module.")
+        elif cmd == "mod_tbin_step":
+            axion_iface.tbin_step()
+            print("Executed one TBIN step.")
+        elif cmd == "mod_get_state":
+            state_info = axion_iface.get_tbin_state()
+            print("TBIN State:", state_info)
+        elif cmd == "mod_get_suggest":
+            suggestion = axion_iface.get_suggestion()
+            print("Module Suggestion:", suggestion)
+        elif cmd == "mod_install" and len(tokens) == 2:
+            axion_iface.install_pkg(tokens[1])
+            print(f"Package '{tokens[1]}' installation command sent.")
+        elif cmd == "mod_update" and len(tokens) == 2:
+            axion_iface.update_pkg(tokens[1])
+            print(f"Package '{tokens[1]}' update command sent.")
+        elif cmd == "mod_rollback" and len(tokens) == 2:
+            axion_iface.rollback_pkg(tokens[1])
+            print(f"Package '{tokens[1]}' rollback command sent.")
+        elif cmd == "mod_nl" and len(tokens) >= 2:
+            nl_cmd = " ".join(tokens[1:])
+            axion_iface.nl_command(nl_cmd)
+            print("Natural language command sent to module.")
+        elif cmd == "mod_get_perf":
+            perf = axion_iface.get_perf_feedback()
+            print("Module Performance Feedback:", perf)
+        else:
+            print("Unknown command. Type 'help' for available commands.")
+    except Exception as e:
+        print("Error processing command:", e)
+
+# -------------------------------------------------------------------
+# Main Interactive Loop
+# -------------------------------------------------------------------
+def main():
+    print("TritJS-CISA-Optimized Ternary Calculator with Module Interaction (Python Version)")
+    print("Type 'help' for a list of commands, or 'exit' to quit.")
+    
+    # Initialize the module interface
+    axion_iface = AxionModuleInterface()
+    if axion_iface.fd is None:
+        print("Warning: Could not open Axion module device. Module commands will not work.")
+
+    while True:
+        try:
+            cmd_line = input("> ")
+            process_command(cmd_line, axion_iface)
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting...")
+            break
+
+    axion_iface.close()
+
 if __name__ == "__main__":
-    # Choose between launching the curses UI or a simple CLI.
-    # For this refactored version, we use the CLI with an ASCII menu.
     main()
