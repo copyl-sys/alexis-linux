@@ -23,7 +23,7 @@ This Python program has been optimized for:
 • State Management: save and load session states (encrypted using OpenSSL AES‑256‑CBC)
 • Security: secure audit logging (with file locking) and intrusion detection  
 • Benchmarking: bench command runs performance tests (via integration tests)  
-• Scripting & Variables: command interpreter with support for state management and interface functions  
+• Scripting & Variables: command interpreter with support for state management, history, and interface functions  
 • Interface: enhanced curses-based UI (with color and terminal resize support)  
 • Build Automation: external Makefile & CI‑CD pipeline (not shown) automate builds, tests, and deployment.
 
@@ -52,6 +52,10 @@ VERSION = "2.0-upgrade-optimized"
 AUDIT_LOG_PATH = "/var/log/tritjs_cisa.log"
 OPERATION_STEPS = 0
 INTRUSION_ALERT = False
+
+# Global command history and variable storage (for demonstration)
+history = []
+variables = [None] * 26  # placeholder for variables A-Z
 
 def init_audit_log():
     """Initialize the audit log with file locking."""
@@ -301,6 +305,8 @@ def curses_ui():
             cmd = stdscr.getstr(2, 0, 80).decode('utf-8').strip()
             if cmd.lower() == "q":
                 break
+            # Append command to history
+            history.append(cmd)
             try:
                 parts = cmd.split()
                 if parts[0] == "add":
@@ -358,18 +364,23 @@ def curses_ui():
                     result = t_logic_xor(parts[1], parts[2])
                     stdscr.addstr(4, 0, f"Result: {result}\n")
                 elif parts[0] == "save":
-                    state = {"history": [], "variables": []}
+                    state = {"history": history, "variables": [v for v in variables if v]}
                     msg = save_state(parts[1], state)
                     stdscr.addstr(4, 0, f"{msg}\n")
                 elif parts[0] == "load":
                     state = load_state(parts[1])
                     stdscr.addstr(4, 0, f"State loaded: {state}\n")
                 elif parts[0] == "clear":
-                    stdscr.addstr(4, 0, f"{c_clear()}\n")
+                    history.clear()
+                    for i in range(len(variables)):
+                        variables[i] = None
+                    stdscr.addstr(4, 0, "History and variables cleared\n")
+                elif parts[0] == "history":
+                    stdscr.addstr(4, 0, "Command History:\n" + "\n".join(history) + "\n")
                 elif parts[0] == "help":
                     help_text = (
                         "Commands: add, sub, mul, div, pow, fact, sqrt, log3, sin, cos, tan, pi,\n"
-                        "          bin2tri, tri2bin, and, or, not, xor, save, load, clear, runlua, help\n"
+                        "          bin2tri, tri2bin, and, or, not, xor, save, load, clear, history, runlua, help\n"
                     )
                     stdscr.addstr(6, 0, help_text)
                 elif parts[0] == "runlua":
@@ -432,6 +443,28 @@ def c_help():
         "  c_get_operation_steps() - Returns current operation count\n"
     )
 
+# --- Define Aliases for Lua Integration ---
+c_add = t_add
+c_sub = t_sub
+c_mul = t_mul
+def c_div(a, b):
+    q, r = t_div(a, b)
+    return f"Quotient: {q}, Remainder: {r}"
+c_pow = t_pow
+c_fact = t_fact
+c_sqrt = t_sqrt
+c_log3 = t_log3
+c_sin = t_sin
+c_cos = t_cos
+c_tan = t_tan
+c_pi = t_pi
+c_bin2tri = lambda n: int_to_ternary(int(n))
+c_tri2bin = ternary_to_int
+c_and = t_logic_and
+c_or = t_logic_or
+c_not = t_logic_not
+c_xor = t_logic_xor
+
 # --- Integration Test Cases ---
 def run_integration_tests():
     # Crypto Test using OpenSSL via subprocess
@@ -464,6 +497,7 @@ def main():
             cmd = input("> ")
             if cmd.lower() in ["exit", "quit"]:
                 break
+            history.append(cmd)  # Store command in history
             global OPERATION_STEPS
             OPERATION_STEPS += 1
             parts = cmd.split()
@@ -507,13 +541,17 @@ def main():
             elif parts[0] == "xor":
                 print("Result:", t_logic_xor(parts[1], parts[2]))
             elif parts[0] == "save":
-                state = {"history": [], "variables": []}  # For demo purposes
+                state = {"history": history, "variables": [v for v in variables if v]}
                 print(save_state(parts[1], state))
             elif parts[0] == "load":
                 state = load_state(parts[1])
                 print("State loaded:", state)
             elif parts[0] == "clear":
                 print(c_clear())
+            elif parts[0] == "history":
+                print("Command History:")
+                for cmd_entry in history:
+                    print(cmd_entry)
             elif parts[0] == "help":
                 print(c_help())
             elif parts[0] == "runlua":
@@ -525,6 +563,7 @@ def main():
             print("Error:", e)
             
 if __name__ == "__main__":
-    # Uncomment one of the following lines to choose the UI:
+    # Choose between launching the curses UI or a simple CLI.
+    # Uncomment one of the following lines:
     # curses_ui()  # Launch curses-based UI
     main()         # Launch simple command-line interface
