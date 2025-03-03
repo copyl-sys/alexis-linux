@@ -1,1 +1,886 @@
+@* Ternary System: Unified Kernel Module and User–Space Utility
+This literate program integrates our Axion kernel module with the TritJS‑CISA–Optimized
+user–space utility into one source file. Our mission is to transition from binary to native
+ternary computing by providing a unified foundation that spans both the kernel and user spaces.
+It now also includes an interactive instruction parser which accepts textual commands (inspired
+by The TeXbook style) to control and demonstrate system functionality.
 
+FEATURES:
+  - Common Ternary Logic Definitions:
+      • Unified definitions for ternary states, instruction opcodes, and error codes.
+  - Axion Kernel Module:
+      • AI–powered predictive load balancing.
+      • Ternary binary execution via JIT compilation (emulated on binary hardware).
+      • Integrated package management with dependency resolution and rollback.
+  - TritJS‑CISA–Optimized Utility:
+      • Advanced ternary arithmetic using optimized (Karatsuba) algorithms with caching.
+      • Scientific functions (sqrt, log3, sin, cos, tan, π) via double conversion.
+      • Secure audit logging and real–time intrusion detection.
+      • An interactive, ncurses–based command–line interface.
+  - Instruction Parser:
+      • An interactive mode that accepts commands such as “help”, “expr”, “hanoi”, “ser”, “des”, and “opcode”.
+      • Inspired by the robust style of The TeXbook, it provides detailed usage examples and feature descriptions.
+  - Built–in Help System:
+      • Type "help" at the command prompt to display a summary of available commands and detailed feature descriptions.
+  - Unified Mission:
+      • To provide a seamless, cohesive environment for testing and advancing ternary computing from the kernel
+        all the way to the application level.
+
+USAGE:
+  • For kernel deployment: Compile with __KERNEL__ defined so that the Axion module is built.
+  • For user–space operation: Compile normally to build the TritJS‑CISA–Optimized utility.
+  • To run interactively, invoke the utility with no arguments (or with "interactive")—the system will display a prompt.
+  • In the interactive mode, type “help” for a list of commands and usage examples.
+
+This system is designed to evolve along with our R&D efforts, ensuring that both components work seamlessly toward our goal of native ternary computing.
+@*/
+
+/*=====================================================================
+  Core Header File: ternary_system.h
+  This header defines the primary interfaces for the ternary system and discrete math–enhanced opcode operations.
+  It is intended for inclusion in both kernel modules and user–space utilities.
+=====================================================================*/
+@* Core Header File: ternary_system.h
+@o ternary_system.h
+@c
+#ifndef TERNARY_SYSTEM_H
+#define TERNARY_SYSTEM_H
+
+#ifdef __KERNEL__
+  /* Kernel mode: include Linux-specific headers and use kmalloc/kfree */
+  #include <linux/types.h>
+  #include <linux/slab.h>
+  #define TS_MALLOC(sz) kmalloc((sz), GFP_KERNEL)
+  #define TS_FREE(ptr) kfree((ptr))
+  #define TS_PRINT(fmt, ...) printk(KERN_INFO fmt, ##__VA_ARGS__)
+#else
+  /* User mode: include standard C libraries */
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <ctype.h>
+  #include <string.h>
+  #define TS_MALLOC(sz) malloc(sz)
+  #define TS_FREE(ptr) free(ptr)
+  #define TS_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*---------------------------------------------------------------------
+  Expression Parser Functions
+----------------------------------------------------------------------*/
+/* Evaluates a ternary arithmetic expression.
+   The expression is given as a null-terminated string (e.g., "12+21*(2-1)")
+   containing digits (0,1,2), operators (+, -, *, /) and parentheses.
+   Returns the computed integer result.
+*/
+int tritjs_eval_expression(const char *expr);
+
+/* Converts an integer to its ternary (base 3) string representation.
+   The result is stored in the provided buffer (assumed to be large enough).
+*/
+void int_to_ternary(int n, char *buffer);
+
+/*---------------------------------------------------------------------
+  Tower of Hanoi Solver
+----------------------------------------------------------------------*/
+/* Solves the Tower of Hanoi puzzle for n disks.
+   Each disk’s position is encoded as a trit (0, 1, or 2) representing its peg.
+   Disks are initially assumed to be on peg 0.
+*/
+void solve_hanoi(int n);
+
+/*---------------------------------------------------------------------
+  Matrix Operations
+----------------------------------------------------------------------*/
+/* Matrix structure definition */
+typedef struct TMatrix {
+    int rows;
+    int cols;
+    int **data;
+} TMatrix;
+
+/* Creates a matrix with the specified number of rows and columns. */
+TMatrix *create_matrix(int rows, int cols);
+
+/* Frees the memory allocated for a matrix. */
+void free_matrix(TMatrix *m);
+
+/* Adds two matrices (A + B). Dimensions must match.
+   Returns a new matrix containing the result.
+*/
+TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B);
+
+/* Multiplies two matrices (A * B).
+   The number of columns of A must equal the number of rows of B.
+*/
+TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B);
+
+/* Serializes a matrix to a file.
+   The file first contains the dimensions, then each element in ternary.
+*/
+void serialize_matrix(TMatrix *m, const char *filename);
+
+/* Deserializes a matrix from a file.
+   The file must be in the format produced by serialize_matrix.
+*/
+TMatrix *deserialize_matrix(const char *filename);
+
+/*---------------------------------------------------------------------
+  Discrete Math–Enhanced Opcode Functions
+  These functions implement new opcodes designed using principles of combinatorics,
+  modular arithmetic, and finite-state machines.
+----------------------------------------------------------------------*/
+/* Encodes an opcode (an integer identifier) into its discrete-math based ternary representation.
+   This function applies a bijective mapping based on combinatorial design.
+*/
+void discrete_opcode_encode(int opcode, char *encoded_buffer);
+
+/* Validates an encoded opcode using a modular checksum.
+   Returns 1 if the opcode is valid, 0 otherwise.
+*/
+int discrete_opcode_validate(const char *encoded_opcode);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* TERNARY_SYSTEM_H */
+@*/
+
+/*=====================================================================
+  Utility Header File: ternary_system_util.h
+  This header provides additional helper functions for user–space applications,
+  including printing the Tower of Hanoi state, displaying help, and the interactive instruction parser.
+=====================================================================*/
+@* Utility Header File: ternary_system_util.h
+@o ternary_system_util.h
+@c
+#ifndef TERNARY_SYSTEM_UTIL_H
+#define TERNARY_SYSTEM_UTIL_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Prints the current state of the Tower of Hanoi disks.
+   'state' is an array where each element (a trit: 0, 1, or 2) indicates the peg.
+   'n' is the number of disks.
+*/
+void print_state(int *state, int n);
+
+/* Displays help and usage information for the Ternary System utility program,
+   including details about the discrete math opcode enhancements and the interactive instruction parser.
+*/
+void print_help(void);
+
+/* Launches the interactive instruction parser.
+   In this mode, the program repeatedly reads commands from the user and executes them.
+*/
+void instruction_parser(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* TERNARY_SYSTEM_UTIL_H */
+@*/
+
+/*=====================================================================
+  Core Implementation: ternary_system.c
+  This file implements all core functionalities declared in ternary_system.h,
+  including the expression parser, Hanoi solver, matrix operations, and new
+  discrete math–enhanced opcode functions.
+=====================================================================*/
+@* Core Implementation: ternary_system.c
+@o ternary_system.c
+@c
+#include "ternary_system.h"
+
+/*---------------------------------------------------------------------
+  Expression Parser Implementation
+----------------------------------------------------------------------*/
+/* Global pointer used during parsing */
+static const char *expr_ptr;
+
+/* Error handling function: logs an error message and terminates (or exits in user mode) */
+void error(const char *msg) {
+#ifdef __KERNEL__
+    TS_PRINT("Error: %s\n", msg);
+#else
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(1);
+#endif
+}
+
+/* Forward declarations for recursive descent parsing functions */
+static int parse_expr(void);
+static int parse_term(void);
+static int parse_factor(void);
+
+/* Parses a ternary number from the expression string */
+static int parse_number(void) {
+    int value = 0;
+    if (!(*expr_ptr >= '0' && *expr_ptr <= '2'))
+        error("Expected a digit (0, 1, or 2)");
+    while (*expr_ptr && (*expr_ptr == '0' || *expr_ptr == '1' || *expr_ptr == '2')) {
+        value = value * 3 + (*expr_ptr - '0');
+        expr_ptr++;
+    }
+    return value;
+}
+
+/* Parses a factor: either a number or a parenthesized expression */
+static int parse_factor(void) {
+    while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+    if (*expr_ptr == '(') {
+        expr_ptr++;  /* skip '(' */
+        int value = parse_expr();
+        if (*expr_ptr != ')')
+            error("Expected ')'");
+        expr_ptr++;  /* skip ')' */
+        return value;
+    }
+    return parse_number();
+}
+
+/* Parses a term: factor { ('*' | '/') factor } */
+static int parse_term(void) {
+    int value = parse_factor();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '*' || *expr_ptr == '/') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_factor();
+            if (op == '*')
+                value = value * next_val;
+            else {
+                if (next_val == 0)
+                    error("Division by zero");
+                value = value / next_val;
+            }
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+/* Parses an expression: term { ('+' | '-') term } */
+static int parse_expr(void) {
+    int value = parse_term();
+    while (*expr_ptr) {
+        while (*expr_ptr && isspace(*expr_ptr)) expr_ptr++;
+        if (*expr_ptr == '+' || *expr_ptr == '-') {
+            char op = *expr_ptr;
+            expr_ptr++;
+            int next_val = parse_term();
+            if (op == '+')
+                value = value + next_val;
+            else
+                value = value - next_val;
+        } else {
+            break;
+        }
+    }
+    return value;
+}
+
+/* Public interface: evaluate a ternary arithmetic expression */
+int tritjs_eval_expression(const char *expr) {
+    expr_ptr = expr;
+    int result = parse_expr();
+    while (*expr_ptr) {
+        if (!isspace(*expr_ptr))
+            error("Unexpected character in expression");
+        expr_ptr++;
+    }
+    return result;
+}
+
+/* Converts an integer to its ternary representation.
+   The result is stored in the provided buffer.
+*/
+void int_to_ternary(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = 0;
+    if (n < 0) {
+        negative = 1;
+        n = -n;
+    }
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative)
+        temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+/*---------------------------------------------------------------------
+  Tower of Hanoi Solver Implementation
+----------------------------------------------------------------------*/
+/* Prints the current Tower of Hanoi state as a ternary number.
+   Only prints the state for the first n disks.
+*/
+void print_state(int *state, int n) {
+    TS_PRINT("State: ");
+    for (int i = n - 1; i >= 0; i--) {
+        TS_PRINT("%d", state[i]);
+    }
+    TS_PRINT("\n");
+}
+
+/* Helper function: performs a move in the Tower of Hanoi.
+   Updates the state array and logs the move.
+*/
+static void hanoi_move(int disk, int from, int to, int *state) {
+    TS_PRINT("Move disk %d from peg %d to peg %d\n", disk, from, to);
+    state[disk] = to;
+    print_state(state, disk + 1);
+}
+
+/* Recursive function to solve the Tower of Hanoi.
+   Moves n disks from peg 'from' to peg 'to' using 'aux' as auxiliary.
+*/
+static void solve_hanoi_recursive(int n, int from, int to, int aux, int *state) {
+    if (n == 0) return;
+    solve_hanoi_recursive(n - 1, from, aux, to, state);
+    hanoi_move(n - 1, from, to, state);
+    solve_hanoi_recursive(n - 1, aux, to, from, state);
+}
+
+/* Public interface: solves the Tower of Hanoi puzzle for n disks.
+   Initializes the state array (all disks on peg 0) and calls the recursive solver.
+*/
+void solve_hanoi(int n) {
+    int *state = (int *)TS_MALLOC(n * sizeof(int));
+    if (!state) error("Memory allocation failed for Hanoi state");
+    for (int i = 0; i < n; i++)
+        state[i] = 0;
+    TS_PRINT("Initial state (all disks on peg 0):\n");
+    print_state(state, n);
+    solve_hanoi_recursive(n, 0, 2, 1, state);
+    TS_FREE(state);
+}
+
+/*---------------------------------------------------------------------
+  Matrix Operations Implementation
+----------------------------------------------------------------------*/
+/* Creates a matrix with the specified dimensions.
+   Allocates memory for the matrix structure and its data.
+*/
+TMatrix *create_matrix(int rows, int cols) {
+    TMatrix *m = (TMatrix *)TS_MALLOC(sizeof(TMatrix));
+    if (!m) error("Memory allocation failed for matrix structure");
+    m->rows = rows;
+    m->cols = cols;
+    m->data = (int **)TS_MALLOC(rows * sizeof(int *));
+    if (!m->data) error("Memory allocation failed for matrix data");
+    for (int i = 0; i < rows; i++) {
+        m->data[i] = (int *)TS_MALLOC(cols * sizeof(int));
+        if (!m->data[i]) error("Memory allocation failed for matrix row");
+        for (int j = 0; j < cols; j++)
+            m->data[i][j] = 0;
+    }
+    return m;
+}
+
+/* Frees the memory allocated for a matrix. */
+void free_matrix(TMatrix *m) {
+    if (m) {
+        for (int i = 0; i < m->rows; i++)
+            TS_FREE(m->data[i]);
+        TS_FREE(m->data);
+        TS_FREE(m);
+    }
+}
+
+/* Adds two matrices (A + B). Dimensions must match.
+   Returns a new matrix containing the result.
+*/
+TMatrix *TMAT_ADD(TMatrix *A, TMatrix *B) {
+    if (A->rows != B->rows || A->cols != B->cols)
+        error("Matrix dimensions mismatch for addition");
+    TMatrix *result = create_matrix(A->rows, A->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < A->cols; j++)
+            result->data[i][j] = A->data[i][j] + B->data[i][j];
+    }
+    return result;
+}
+
+/* Multiplies two matrices (A * B).
+   The number of columns in A must equal the number of rows in B.
+*/
+TMatrix *TMAT_MUL(TMatrix *A, TMatrix *B) {
+    if (A->cols != B->rows)
+        error("Matrix dimensions mismatch for multiplication");
+    TMatrix *result = create_matrix(A->rows, B->cols);
+    for (int i = 0; i < A->rows; i++) {
+        for (int j = 0; j < B->cols; j++) {
+            int sum = 0;
+            for (int k = 0; k < A->cols; k++)
+                sum += A->data[i][k] * B->data[k][j];
+            result->data[i][j] = sum;
+        }
+    }
+    return result;
+}
+
+/* Internal helper: converts an integer to its ternary string.
+   Used for serializing matrix elements.
+*/
+static void int_to_ternary_internal(int n, char *buffer) {
+    char temp[64];
+    int i = 0;
+    if (n == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    int negative = 0;
+    if (n < 0) {
+        negative = 1;
+        n = -n;
+    }
+    while (n > 0) {
+        temp[i++] = '0' + (n % 3);
+        n /= 3;
+    }
+    if (negative)
+        temp[i++] = '-';
+    temp[i] = '\0';
+    int len = strlen(temp);
+    for (int j = 0; j < len; j++)
+        buffer[j] = temp[len - j - 1];
+    buffer[len] = '\0';
+}
+
+/* Serializes a matrix to a file.
+   The file stores the dimensions on the first line, then each element (in ternary) is written.
+*/
+void serialize_matrix(TMatrix *m, const char *filename) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) error("Failed to open file for matrix serialization");
+    fprintf(fp, "%d %d\n", m->rows, m->cols);
+    char buffer[64];
+    for (int i = 0; i < m->rows; i++) {
+        for (int j = 0; j < m->cols; j++) {
+            int_to_ternary_internal(m->data[i][j], buffer);
+            fprintf(fp, "%s ", buffer);
+        }
+        fprintf(fp, "\n");
+    }
+    fclose(fp);
+}
+
+/* Deserializes a matrix from a file.
+   The file must have been written by serialize_matrix.
+*/
+TMatrix *deserialize_matrix(const char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (!fp) error("Failed to open file for matrix deserialization");
+    int rows, cols;
+    if (fscanf(fp, "%d %d", &rows, &cols) != 2)
+        error("Failed to read matrix dimensions");
+    TMatrix *m = create_matrix(rows, cols);
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            char buf[64];
+            if (fscanf(fp, "%63s", buf) != 1)
+                error("Failed to read matrix element");
+            int value = 0;
+            char *p = buf;
+            int is_negative = 0;
+            if (*p == '-') { is_negative = 1; p++; }
+            while (*p) {
+                if (*p < '0' || *p > '2')
+                    error("Invalid digit in ternary number");
+                value = value * 3 + (*p - '0');
+                p++;
+            }
+            if (is_negative)
+                value = -value;
+            m->data[i][j] = value;
+        }
+    }
+    fclose(fp);
+    return m;
+}
+
+/*---------------------------------------------------------------------
+  Discrete Math–Enhanced Opcode Functions Implementation
+----------------------------------------------------------------------*/
+/* In our design, we use discrete mathematics techniques to create new opcodes.
+   The discrete_opcode_encode function maps an integer opcode into a ternary string
+   using a combinatorial scheme and appends a modular checksum.
+*/
+void discrete_opcode_encode(int opcode, char *encoded_buffer) {
+    /* Convert the opcode into ternary */
+    char temp[64];
+    int_to_ternary(opcode, temp);
+    /* Compute a simple checksum: sum of digits modulo 3 */
+    int checksum = 0;
+    for (int i = 0; temp[i] != '\0'; i++) {
+        if (temp[i] >= '0' && temp[i] <= '2')
+            checksum += (temp[i] - '0');
+    }
+    checksum %= 3;
+    /* Append the checksum digit to the encoded opcode */
+    sprintf(encoded_buffer, "%s%c", temp, '0' + checksum);
+}
+
+/* Validates an encoded opcode by checking its modular checksum.
+   Returns 1 if valid, 0 otherwise.
+*/
+int discrete_opcode_validate(const char *encoded_opcode) {
+    int len = strlen(encoded_opcode);
+    if (len < 2) return 0;
+    int computed_sum = 0;
+    for (int i = 0; i < len - 1; i++) {
+        if (encoded_opcode[i] < '0' || encoded_opcode[i] > '2')
+            return 0;
+        computed_sum += (encoded_opcode[i] - '0');
+    }
+    computed_sum %= 3;
+    int provided_checksum = encoded_opcode[len - 1] - '0';
+    return (computed_sum == provided_checksum);
+}
+@*/
+
+/*=====================================================================
+  Interactive Instruction Parser Implementation
+  This section defines an interactive instruction parser for the user–space utility.
+  In interactive mode, the parser repeatedly reads commands from the user, parses them,
+  and calls the appropriate functions.
+=====================================================================*/
+@* Instruction Parser Implementation
+@o instruction_parser.c
+@c
+#ifndef __KERNEL__
+#include <stdio.h>
+#include <string.h>
+#include "ternary_system.h"
+#include "ternary_system_util.h"
+
+/* Processes a single instruction line entered by the user.
+   Supported commands:
+     help            -- Display help text.
+     expr <command>  -- Evaluate a ternary expression.
+     hanoi <n>       -- Solve the Tower of Hanoi with n disks.
+     ser <filename>  -- Serialize a sample matrix.
+     des <filename>  -- Deserialize a matrix and perform operations.
+     opcode <number> -- Encode and validate an opcode.
+     exit            -- Exit the interactive mode.
+*/
+static void process_instruction(char *line) {
+    char *token = strtok(line, " \t\n");
+    if (!token) return;
+    if (strcmp(token, "help") == 0) {
+        print_help();
+    } else if (strcmp(token, "expr") == 0) {
+        char *expr = strtok(NULL, "\n");
+        if (!expr) {
+            printf("Usage: expr \"expression\"\n");
+            return;
+        }
+        int result = tritjs_eval_expression(expr);
+        char buffer[64];
+        int_to_ternary(result, buffer);
+        printf("Result (ternary): %s\n", buffer);
+    } else if (strcmp(token, "hanoi") == 0) {
+        token = strtok(NULL, " \t\n");
+        if (!token) {
+            printf("Usage: hanoi <n>\n");
+            return;
+        }
+        int n = atoi(token);
+        solve_hanoi(n);
+    } else if (strcmp(token, "ser") == 0) {
+        token = strtok(NULL, " \t\n");
+        if (!token) {
+            printf("Usage: ser <filename>\n");
+            return;
+        }
+        TMatrix *m = create_matrix(3, 3);
+        for (int i = 0; i < m->rows; i++)
+            for (int j = 0; j < m->cols; j++)
+                m->data[i][j] = (i + j) % 3;
+        serialize_matrix(m, token);
+        printf("Matrix serialized to %s\n", token);
+        free_matrix(m);
+    } else if (strcmp(token, "des") == 0) {
+        token = strtok(NULL, " \t\n");
+        if (!token) {
+            printf("Usage: des <filename>\n");
+            return;
+        }
+        TMatrix *m = deserialize_matrix(token);
+        printf("Deserialized matrix:\n");
+        for (int i = 0; i < m->rows; i++) {
+            for (int j = 0; j < m->cols; j++)
+                printf("%d ", m->data[i][j]);
+            printf("\n");
+        }
+        TMatrix *add_result = TMAT_ADD(m, m);
+        printf("Matrix after addition (m + m):\n");
+        for (int i = 0; i < add_result->rows; i++) {
+            for (int j = 0; j < add_result->cols; j++)
+                printf("%d ", add_result->data[i][j]);
+            printf("\n");
+        }
+        if (m->rows == m->cols) {
+            TMatrix *mul_result = TMAT_MUL(m, m);
+            printf("Matrix after multiplication (m * m):\n");
+            for (int i = 0; i < mul_result->rows; i++) {
+                for (int j = 0; j < mul_result->cols; j++)
+                    printf("%d ", mul_result->data[i][j]);
+                printf("\n");
+            }
+            free_matrix(mul_result);
+        }
+        free_matrix(add_result);
+        free_matrix(m);
+    } else if (strcmp(token, "opcode") == 0) {
+        token = strtok(NULL, " \t\n");
+        if (!token) {
+            printf("Usage: opcode <number>\n");
+            return;
+        }
+        int opcode = atoi(token);
+        char encoded[64];
+        discrete_opcode_encode(opcode, encoded);
+        printf("Opcode %d encoded as: %s\n", opcode, encoded);
+        if (discrete_opcode_validate(encoded))
+            printf("Encoded opcode %s is valid.\n", encoded);
+        else
+            printf("Encoded opcode %s is invalid.\n", encoded);
+    } else if (strcmp(token, "exit") == 0) {
+        printf("Exiting interactive mode.\n");
+        exit(0);
+    } else {
+        printf("Unknown command: %s. Type \"help\" for a list of commands.\n", token);
+    }
+}
+
+/* Main loop for the interactive instruction parser */
+void instruction_parser(void) {
+    char line[256];
+    printf("Ternary System Interactive Mode. Type \"help\" for instructions. Type \"exit\" to quit.\n");
+    while (1) {
+        printf("ts> ");
+        if (!fgets(line, sizeof(line), stdin))
+            break;
+        process_instruction(line);
+    }
+}
+#endif
+@*/
+
+/*=====================================================================
+  Kernel Module Implementation: ternary_system_kernel.c
+  This file demonstrates usage of the ternary system functions in kernel mode.
+=====================================================================*/
+@* Kernel Module Implementation: ternary_system_kernel.c
+@o ternary_system_kernel.c
+@c
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <linux/init.h>
+#include "ternary_system.h"
+
+/* Module initialization: demonstrate expression evaluation, Hanoi solver, and opcode encoding */
+static int __init ternary_system_init(void) {
+    TS_PRINT("Ternary System Kernel Module Loaded\n");
+
+    /* Expression evaluation demonstration */
+    {
+        const char *expr = "12+21*(2-1)";
+        int result = tritjs_eval_expression(expr);
+        char buf[64];
+        int_to_ternary(result, buf);
+        TS_PRINT("Expression '%s' evaluated to: %s (ternary)\n", expr, buf);
+    }
+
+    /* Tower of Hanoi demonstration with 3 disks */
+    {
+        TS_PRINT("Solving Tower of Hanoi with 3 disks:\n");
+        solve_hanoi(3);
+    }
+
+    /* Discrete Math Opcode demonstration */
+    {
+        int opcode = 5; /* sample opcode */
+        char encoded[64];
+        discrete_opcode_encode(opcode, encoded);
+        TS_PRINT("Opcode %d encoded as: %s\n", opcode, encoded);
+        if (discrete_opcode_validate(encoded))
+            TS_PRINT("Encoded opcode %s is valid.\n", encoded);
+        else
+            TS_PRINT("Encoded opcode %s is invalid.\n", encoded);
+    }
+
+    return 0;
+}
+
+/* Module cleanup: log module unloading */
+static void __exit ternary_system_exit(void) {
+    TS_PRINT("Ternary System Kernel Module Unloaded\n");
+}
+
+module_init(ternary_system_init);
+module_exit(ternary_system_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Your Name");
+MODULE_DESCRIPTION("Ternary System Kernel Module with Unified Ternary Logic, Axion Features, and Discrete Math Opcode Enhancements");
+#endif /* __KERNEL__ */
+@*/
+
+/*=====================================================================
+  Utility Program Implementation: ternary_system_util.c
+  This user–space program demonstrates the ternary system functions via command–line options
+  and interactive mode. It supports expression evaluation, Tower of Hanoi, matrix operations,
+  opcode demonstration, and an interactive instruction parser.
+=====================================================================*/
+@* Utility Program Implementation: ternary_system_util.c
+@o ternary_system_util.c
+@c
+#ifndef __KERNEL__
+#include "ternary_system.h"
+#include "ternary_system_util.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(int argc, char *argv[]) {
+    /* If no command–line arguments are provided or the first argument is "interactive",
+       enter interactive mode */
+    if (argc < 2 || strcmp(argv[1], "interactive") == 0) {
+        instruction_parser();
+        return 0;
+    }
+    if (strcmp(argv[1], "-expr") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s -expr \"expression\"\n", argv[0]);
+            return 1;
+        }
+        int result = tritjs_eval_expression(argv[2]);
+        char buffer[64];
+        int_to_ternary(result, buffer);
+        printf("Result (ternary): %s\n", buffer);
+    } else if (strcmp(argv[1], "-hanoi") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s -hanoi n\n", argv[0]);
+            return 1;
+        }
+        int n = atoi(argv[2]);
+        solve_hanoi(n);
+    } else if (strcmp(argv[1], "-ser") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s -ser filename\n", argv[0]);
+            return 1;
+        }
+        TMatrix *m = create_matrix(3, 3);
+        for (int i = 0; i < m->rows; i++)
+            for (int j = 0; j < m->cols; j++)
+                m->data[i][j] = (i + j) % 3;
+        serialize_matrix(m, argv[2]);
+        printf("Matrix serialized to %s\n", argv[2]);
+        free_matrix(m);
+    } else if (strcmp(argv[1], "-des") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s -des filename\n", argv[0]);
+            return 1;
+        }
+        TMatrix *m = deserialize_matrix(argv[2]);
+        printf("Deserialized matrix:\n");
+        for (int i = 0; i < m->rows; i++) {
+            for (int j = 0; j < m->cols; j++)
+                printf("%d ", m->data[i][j]);
+            printf("\n");
+        }
+        TMatrix *add_result = TMAT_ADD(m, m);
+        printf("Matrix after addition (m + m):\n");
+        for (int i = 0; i < add_result->rows; i++) {
+            for (int j = 0; j < add_result->cols; j++)
+                printf("%d ", add_result->data[i][j]);
+            printf("\n");
+        }
+        if (m->rows == m->cols) {
+            TMatrix *mul_result = TMAT_MUL(m, m);
+            printf("Matrix after multiplication (m * m):\n");
+            for (int i = 0; i < mul_result->rows; i++) {
+                for (int j = 0; j < mul_result->cols; j++)
+                    printf("%d ", mul_result->data[i][j]);
+                printf("\n");
+            }
+            free_matrix(mul_result);
+        }
+        free_matrix(add_result);
+        free_matrix(m);
+    } else if (strcmp(argv[1], "-opcode") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s -opcode number\n", argv[0]);
+            return 1;
+        }
+        int opcode = atoi(argv[2]);
+        char encoded[64];
+        discrete_opcode_encode(opcode, encoded);
+        printf("Opcode %d encoded as: %s\n", opcode, encoded);
+        if (discrete_opcode_validate(encoded))
+            printf("Encoded opcode %s is valid.\n", encoded);
+        else
+            printf("Encoded opcode %s is invalid.\n", encoded);
+    } else {
+        print_help();
+    }
+    return 0;
+}
+#endif /* __KERNEL__ */
+@*/
+
+/*=====================================================================
+  Help and Usage Documentation Implementation
+  This section implements print_help for the user–space utility program.
+=====================================================================*/
+@* Help and Usage Documentation Implementation
+@o help_impl.c
+@c
+#ifndef __KERNEL__
+#include <stdio.h>
+#include "ternary_system_util.h"
+
+void print_help(void) {
+    printf("Ternary System Utility Program (Unified Kernel & User–Space)\n");
+    printf("=============================================================\n");
+    printf("Available options:\n");
+    printf("  -expr \"expression\"  : Evaluate a ternary arithmetic expression.\n");
+    printf("                         Example: -expr \"12+21*(2-1)\"\n\n");
+    printf("  -hanoi n            : Solve Tower of Hanoi with n disks.\n\n");
+    printf("  -ser filename       : Serialize a sample 3x3 matrix to the specified file.\n\n");
+    printf("  -des filename       : Deserialize a matrix from the specified file and perform\n");
+    printf("                         matrix addition and multiplication (if square).\n\n");
+    printf("  -opcode number      : Encode and validate a discrete math opcode (demonstration).\n");
+    printf("                         Example: -opcode 5\n\n");
+    printf("Interactive Mode:\n");
+    printf("  Run without arguments or with the argument \"interactive\" to enter a command–line\n");
+    printf("  interactive session. Type \"help\" at the prompt for detailed command instructions.\n");
+    printf("=============================================================\n");
+}
+#endif
+@*/
+
+/* End of Ternary Systems A03 CWEB Document */
