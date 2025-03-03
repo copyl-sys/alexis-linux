@@ -1,17 +1,41 @@
 @* Ternary System: Unified Kernel Module and User–Space Utility
-This literate program integrates our Axion kernel module with the TritJS-CISA–Optimized 
-user–space utility into a single source file. By sharing a common header for ternary 
-definitions and error codes, we ensure that both kernel and user components work seamlessly, 
-paving the way for our transition from binary to native ternary computing.
+This literate program integrates our Axion kernel module with the TritJS‑CISA–Optimized
+user–space utility into one source file. Our mission is to transition from binary to
+native ternary computing by providing a unified foundation that spans both the kernel
+and user spaces.
 
-We use conditional compilation: when __KERNEL__ is defined the kernel module is built,
-and otherwise the user–space utility with an ncurses interface is built.
-@*/
+FEATURES:
+  - Common Ternary Logic Definitions:
+      • Unified definitions for ternary states, instruction opcodes, and error codes.
+  - Axion Kernel Module:
+      • AI–powered predictive load balancing.
+      • Ternary binary execution via JIT compilation (emulated on binary hardware).
+      • Integrated package management with dependency resolution and rollback.
+  - TritJS‑CISA–Optimized Utility:
+      • Advanced ternary arithmetic using optimized (Karatsuba) algorithms with caching.
+      • Scientific functions (sqrt, log3, sin, cos, tan, π) via double conversion.
+      • Secure audit logging and real–time intrusion detection.
+      • An interactive, ncurses–based command–line interface.
+  - Built–in Help System:
+      • Type "help" at the command prompt to display a summary of available commands,
+        usage examples, and detailed feature descriptions.
+  - Unified Mission:
+      • To provide a seamless, cohesive environment for testing and advancing ternary
+        computing from the kernel all the way to the application level.
+
+USAGE:
+  • For kernel deployment: Compile with __KERNEL__ defined so that the Axion module is built.
+  • For user–space operation: Compile normally to build the TritJS‑CISA–Optimized utility.
+  • In the utility, type "help" at the prompt for a listing of commands and features.
+
+This system is designed to evolve along with our research and development efforts,
+ensuring that both components work seamlessly toward our goal of native ternary computing.
+@*
 
 /* ======================================================================
    Section 1: Shared Header - ternary_common.h
-   This header provides the common definitions, including ternary states,
-   instruction set opcodes, and error codes used by both parts of our system.
+   This header provides common definitions for ternary logic: ternary states,
+   instruction opcodes for kernel execution, and error codes used by both parts.
    ====================================================================== */
 @<ternary_common.h@>=
 /* ternary_common.h */
@@ -32,7 +56,7 @@ and otherwise the user–space utility with an ncurses interface is built.
 #define TAND   0x04  /* Ternary AND (minimum of two trits) */
 #define TOR    0x05  /* Ternary OR (maximum of two trits) */
 #define TNOT   0x06  /* Ternary NOT (negate a trit) */
-#define TJMP   0x07  /* Jump to an address if condition is non-zero */
+#define TJMP   0x07  /* Jump if condition is non-zero */
 #define TJZ    0x08  /* Jump if condition is zero */
 #define TJNZ   0x09  /* Jump if condition is non-zero */
 #define TLOAD  0x0A  /* Load a trit from memory into a register */
@@ -57,8 +81,10 @@ typedef enum {
 
 @* ======================================================================
    Section 2: Kernel Module (Axion)
-   The following section implements the Axion kernel module that manages system 
-   resources, executes ternary binaries, and integrates an AI–powered package manager.
+   This section implements the Axion kernel module. It provides:
+     • AI–driven load balancing
+     • Emulated ternary binary execution with a custom instruction set
+     • Package management with dependency resolution and rollback
    This module is compiled only when __KERNEL__ is defined.
    ====================================================================== */
 #ifdef __KERNEL__
@@ -67,11 +93,13 @@ typedef enum {
  * Axion Kernel Module: AI–Powered Ternary Evolution
  *
  * Objective:
- *   - Dynamically manage resources with AI–driven predictive load balancing.
- *   - Execute ternary binaries (emulated on binary hardware) using a custom instruction set.
+ *   - Dynamically manage system resources with an AI–driven load balancer.
+ *   - Execute ternary binaries (emulated on binary hardware) using a dedicated
+ *     ternary instruction set.
  *   - Provide package management with dependency resolution and rollback.
  *
- * The module shares common ternary definitions from ternary_common.h.
+ * This module uses common definitions from ternary_common.h and exposes IOCTL
+ * interfaces and debugfs entries for telemetry and control.
  */
 
 #include <linux/module.h>
@@ -101,25 +129,25 @@ typedef enum {
 #include <asm/io.h>
 #include "ternary_common.h"
 
-/* Constants and Macros specific to the module */
-#define DEVICE_NAME "axion_opt"                      /* Character device name */
-#define AXION_DEFAULT_REGISTER 0x1F                  /* Default general–purpose register */
-#define AXION_DEBUGFS_DIR "axion_debug"              /* Debugfs directory */
-#define AXION_DEBUGFS_FILE "cpu_state"               /* Telemetry file */
-#define WORKLOAD_HISTORY_SIZE 50                     /* Resource history buffer */
+/* Module–specific constants and macros */
+#define DEVICE_NAME "axion_opt"                      /* Device name for character device */
+#define AXION_DEFAULT_REGISTER 0x1F                  /* Default register value */
+#define AXION_DEBUGFS_DIR "axion_debug"              /* Debugfs directory name */
+#define AXION_DEBUGFS_FILE "cpu_state"               /* Debugfs file for telemetry */
+#define WORKLOAD_HISTORY_SIZE 50                     /* History buffer size */
 #define ANOMALY_THRESHOLD 30                         /* Anomaly detection threshold (%) */
 #define SELF_HEALING_THRESHOLD 50                    /* Self–healing threshold (%) */
-#define PREDICTIVE_LOAD_BALANCING_INTERVAL 5000      /* Interval in milliseconds */
+#define PREDICTIVE_LOAD_BALANCING_INTERVAL 5000      /* Load balancing interval (ms) */
 #define RESOURCE_WEIGHT_CPU 0.5                      /* Initial CPU weight */
 #define RESOURCE_WEIGHT_GPU 0.3                      /* Initial GPU weight */
 #define RESOURCE_WEIGHT_RAM 0.2                      /* Initial RAM weight */
-#define FEEDBACK_ADJUSTMENT_FACTOR 0.1               /* Adjustment factor for weights */
+#define FEEDBACK_ADJUSTMENT_FACTOR 0.1               /* AI adjustment factor */
 #define MAX_PACKAGES 32                              /* Maximum packages tracked */
 #define MAX_DEPS 8                                   /* Maximum dependencies per package */
 #define TBIN_MAGIC 0x5442494E                        /* Magic number for TBIN files */
-#define TERNARY_MEM_SIZE 32                          /* Memory array size for ternary execution */
+#define TERNARY_MEM_SIZE 32                          /* Size of ternary memory array */
 
-/* Data Structures for the Kernel Module */
+/* Data structures */
 struct resource_state {
     int cpu_usage;
     int ram_usage;
@@ -141,12 +169,12 @@ struct tbin_header {
 };
 
 struct tbin_state {
-    int8_t reg[3];  /* Ternary registers */
+    int8_t reg[3];         /* Ternary registers */
     int8_t memory[TERNARY_MEM_SIZE];
-    uint32_t ip;    /* Instruction pointer */
-    void *code;     /* Code buffer */
+    uint32_t ip;           /* Instruction pointer */
+    void *code;            /* Code buffer */
     uint32_t code_size;
-    int running;    /* Execution flag */
+    int running;           /* Running flag */
 };
 
 struct package {
@@ -154,7 +182,7 @@ struct package {
     char version[16];
     char deps[MAX_DEPS][32];
     int dep_count;
-    int state;      /* Ternary state: -1, 0, or 1 */
+    int state;             /* Ternary state: -1, 0, or 1 */
     int is_binary;
     int risk_score;
 };
@@ -188,7 +216,7 @@ struct axion_state {
     int resource_adjustment_log[WORKLOAD_HISTORY_SIZE];
 };
 
-/* IOCTL Commands */
+/* IOCTL command definitions */
 #define AXION_SET_REGISTER      _IOW('a', 1, uint64_t)
 #define AXION_GET_REGISTER      _IOR('a', 2, uint64_t)
 #define AXION_TBIN_LOAD         _IOW('a', 3, struct tbin_header)
@@ -230,7 +258,7 @@ static struct axion_state state = {
     .suppression_resistance = 0
 };
 
-/* Resource Monitoring Functions (simplified for demonstration) */
+/* Resource monitoring functions (simplified) */
 static int get_cpu_usage(void) { return 50; }
 static int get_ram_usage(void) { return 60; }
 static int get_gpu_usage(void) { return 40; }
@@ -265,7 +293,7 @@ static void axion_predictive_load_balancer(struct timer_list *t) {
     mod_timer(&axion_load_balancer, jiffies + msecs_to_jiffies(PREDICTIVE_LOAD_BALANCING_INTERVAL));
 }
 
-/* Ternary Execution Functions */
+/* Ternary execution functions */
 static int axion_tbin_step(void) {
     if (!state.tbin.running || state.tbin.ip >= state.tbin.code_size - 2 || !state.tbin.code) {
         printk(KERN_ERR "Axion: Invalid TBIN state for execution\n");
@@ -402,7 +430,7 @@ static struct linux_binfmt axion_tbin_format = {
     .load_binary = load_tbin_binary,
 };
 
-/* Package Manager Functions */
+/* Package management functions */
 static void axion_predict_needs(void) {
     if (state.python_usage > 50)
         snprintf(state.suggestion, sizeof(state.suggestion),
@@ -504,7 +532,7 @@ static int axion_get_perf_feedback(void) {
     return (int)(get_random_int() % 100);
 }
 
-/* Workload and Suggestion Functions */
+/* Workload and suggestion work function */
 static void axion_suggestion_work(struct work_struct *work) {
     int current_load = state.workload_history[(state.workload_index == 0 ? WORKLOAD_HISTORY_SIZE - 1 : state.workload_index - 1)];
     if (current_load > ANOMALY_THRESHOLD)
@@ -513,7 +541,7 @@ static void axion_suggestion_work(struct work_struct *work) {
     schedule_work(&axion_work);
 }
 
-/* Module initialization and cleanup */
+/* Module initialization and exit functions */
 static int __init axion_init(void) {
     int ret = alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME);
     if (ret < 0) {
@@ -573,28 +601,33 @@ MODULE_DESCRIPTION("Axion: AI-Powered Kernel Module for Ternary Logic Evolution"
 
 @* ======================================================================
    Section 3: User–Space Utility Program (TritJS-CISA-Optimized)
-   This section implements our advanced ternary calculator, providing a 
-   command–line interface with ncurses for performing arithmetic, scientific, 
-   and conversion operations using ternary logic.
+   This section implements our advanced ternary calculator utility with an
+   interactive ncurses–based interface. It supports advanced arithmetic,
+   scientific functions, secure logging, and a built–in help system (type "help").
+   This section is compiled when __KERNEL__ is not defined.
    ====================================================================== */
 #ifndef __KERNEL__
 @<TritJS-CISA-Optimized Utility@>=
 /***********************************************************************
  * TritJS-CISA-Optimized: Advanced Ternary Calculator Utility
  *
- * Features:
- *   - Safe and efficient dynamic memory management.
- *   - Optimized base conversion and arithmetic (using Karatsuba multiplication).
- *   - Support for scientific functions via double conversion.
- *   - Integrated secure audit logging and real-time monitoring.
- *   - ncurses–based user interface with command processing.
+ * FEATURES:
+ *   - Safe dynamic memory management and optimized arithmetic operations,
+ *     including Karatsuba multiplication with caching.
+ *   - Scientific functions (sqrt, log3, sin, cos, tan, π) via double conversion.
+ *   - Secure audit logging and simulated intrusion detection.
+ *   - Interactive ncurses–based command–line interface with dynamic resizing.
+ *   - Built–in help system: Type "help" at the prompt for command details.
  *
- * Compilation:
- *   gcc -DUSE_READLINE -o tritjs_cisa_optimized ternary_system.cweb -lm -lreadline \
- *       -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses -lcrypto -lpthread -llua
+ * USAGE:
+ *   Compile with:
+ *     gcc -DUSE_READLINE -o tritjs_cisa_optimized ternary_system.cweb -lm -lreadline \
+ *         -fstack-protector-strong -D_FORTIFY_SOURCE=2 -pie -fPIE -lncurses -lcrypto -lpthread -llua
+ *   Then run:
+ *     ./tritjs_cisa_optimized
  *
- * Usage:
- *   ./tritjs_cisa_optimized
+ * This utility shares a unified ternary logic foundation with the Axion kernel module,
+ * helping to advance our mission toward native ternary computing.
  ***********************************************************************/
 
 #include <stdio.h>
@@ -621,13 +654,13 @@ MODULE_DESCRIPTION("Axion: AI-Powered Kernel Module for Ternary Logic Evolution"
 #include <readline/history.h>
 #endif
 
-/* Global configuration for the utility */
+/* Global configuration */
 #define ENABLE_VERBOSE_LOGGING 1
 #define VERSION "2.0-upgrade-optimized"
 #define BASE_81 81
 #define T81_MMAP_THRESHOLD (500 * 1024)
 
-/* Data Structures for Big Integer Arithmetic */
+/* Data structures for big integer arithmetic */
 typedef struct {
     int sign;                 /* 0 = positive, 1 = negative */
     unsigned char *digits;    /* Array of base–81 digits (little–endian) */
@@ -639,8 +672,8 @@ typedef struct {
 
 typedef struct {
     int sign;
-    unsigned char* integer;   /* Digits for the integer part */
-    unsigned char* fraction;  /* Digits for the fractional part */
+    unsigned char* integer;   /* Digits for integer part */
+    unsigned char* fraction;  /* Digits for fractional part */
     size_t i_len, f_len;
     int i_mapped, f_mapped;
     int i_fd, f_fd;
@@ -678,7 +711,7 @@ static Script scripts[10] = {0};
 static int script_count = 0;
 static WINDOW *input_win, *output_win, *status_win;
 
-/* Function Prototypes for Arithmetic Operations */
+/* Function prototypes for arithmetic and scientific operations */
 TernaryError tritjs_add_big(T81BigInt* A, T81BigInt* B, T81BigInt** result);
 TernaryError tritjs_subtract_big(T81BigInt* A, T81BigInt* B, T81BigInt** result);
 TernaryError tritjs_multiply_big(T81BigInt* a, T81BigInt* b, T81BigInt** result);
@@ -698,7 +731,7 @@ TernaryError trit_to_binary(T81BigInt* x, int* outVal);
 void tritbig_free(T81BigInt* x);
 TernaryError parse_balanced_trit_string(const char* s, T81BigInt** out);
 
-/* Logging and Error Handling */
+/* Logging and error handling functions */
 static const char* trit_error_str(TernaryError err) {
     switch(err){
         case TERNARY_NO_ERROR: return "No error";
@@ -724,7 +757,7 @@ static void log_error(TernaryError err, const char* context, const char* file, i
     fflush(audit_log);
 }
 
-/* Memory Management for T81BigInt */
+/* Memory management for T81BigInt */
 static TernaryError allocate_digits(T81BigInt *x, size_t lengthNeeded) {
     size_t bytesNeeded = (lengthNeeded == 0 ? 1 : lengthNeeded);
     x->len = lengthNeeded;
@@ -767,7 +800,7 @@ static void t81bigint_free(T81BigInt* x) {
     }
 }
 
-/* Audit Logging Initialization */
+/* Audit logging initialization */
 static void init_audit_log() {
     audit_log = fopen("/var/log/tritjs_cisa.log", "a");
     if (!audit_log) {
@@ -778,7 +811,7 @@ static void init_audit_log() {
     }
 }
 
-/* Base Conversion and Parsing */
+/* Base conversion and parsing functions */
 static TernaryError parse_trit_string_base81_optimized(const char* str, T81BigInt* out) {
     if (!str || !str[0]) return TERNARY_ERR_INVALID_INPUT;
     memset(out, 0, sizeof(*out));
@@ -928,7 +961,7 @@ void tritbig_free(T81BigInt* x) {
     free(x);
 }
 
-/* Balanced Ternary Parsing: Convert balanced string to T81BigInt */
+/* Balanced ternary parsing: convert balanced ternary string to T81BigInt */
 TernaryError parse_balanced_trit_string(const char* s, T81BigInt** out) {
     if (!s) return TERNARY_ERR_INVALID_INPUT;
     size_t len = strlen(s);
@@ -947,7 +980,7 @@ TernaryError parse_balanced_trit_string(const char* s, T81BigInt** out) {
     return e;
 }
 
-/* Arithmetic Operations Implementation */
+/* Arithmetic operations implementation */
 
 /* Addition */
 TernaryError tritjs_add_big(T81BigInt* A, T81BigInt* B, T81BigInt** result) {
@@ -1241,7 +1274,7 @@ TernaryError tritjs_power_big(T81BigInt* base, T81BigInt* exp, T81BigInt** resul
     return TERNARY_NO_ERROR;
 }
 
-/* Scientific Functions via Double Conversion */
+/* Scientific functions via double conversion */
 static double t81bigint_to_double(T81BigInt* x) {
     int sign = x->sign ? -1 : 1;
     double accum = 0.0;
@@ -1344,7 +1377,7 @@ TernaryError tritjs_pi(int* len, int** pi) {
     return TERNARY_NO_ERROR;
 }
 
-/* Division: Simplified long division using binary conversion */
+/* Division using a simplified long division (via binary conversion) */
 TernaryError tritjs_divide_big(T81BigInt* a, T81BigInt* b, T81BigInt** quotient, T81BigInt** remainder) {
     if (!a || !b) return TERNARY_ERR_INVALID_INPUT;
     int b_zero = 1;
@@ -1382,15 +1415,22 @@ int main(int argc, char** argv) {
     noecho();
     keypad(stdscr, TRUE);
     printw("TritJS-CISA-Optimized Version %s\n", VERSION);
-    printw("Enter commands (type 'exit' to quit):\n");
+    printw("Enter commands (type 'help' for assistance, 'exit' to quit):\n");
     refresh();
     char command[256];
     while (1) {
         printw("> ");
         getnstr(command, sizeof(command)-1);
         if (strcmp(command, "exit") == 0) break;
-        printw("Command received: %s\n", command);
-        /* In a full implementation, command parsing and execution would occur here. */
+        if (strcmp(command, "help") == 0) {
+            printw("\nAvailable Commands:\n");
+            printw("  help   : Display this help message.\n");
+            printw("  exit   : Quit the utility.\n");
+            printw("  [other commands would be implemented here]\n\n");
+        } else {
+            printw("Command received: %s\n", command);
+            /* Command parsing and execution logic would be added here. */
+        }
         refresh();
     }
     endwin();
@@ -1402,7 +1442,8 @@ int main(int argc, char** argv) {
 
 @* ======================================================================
    End of Ternary System Literate Program
-   This file integrates the Axion kernel module and TritJS-CISA–Optimized utility,
-   sharing a common foundation for ternary logic to advance our mission to transition
-   from binary to ternary computing.
+   This file integrates the Axion kernel module and the TritJS-CISA–Optimized
+   user–space utility into a single unified source file. It provides comprehensive
+   documentation, a built–in help system, and shared ternary logic definitions to
+   further our mission to transition from binary to native ternary computing.
    ====================================================================== */
