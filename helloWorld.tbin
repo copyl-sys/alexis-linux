@@ -1,0 +1,71 @@
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
+#define AXION_GET_SUGGESTION _IOR('a', 1, char[256])
+#define AXION_SET_ACTION     _IOW('a', 4, int)
+#define AXION_TBIN_LOAD      _IOW('a', 5, struct tbin_header)
+#define AXION_TBIN_STEP      _IO('a',  6)
+#define AXION_TBIN_GET_STATE _IOR('a', 7, struct tbin_state)
+
+struct tbin_header {
+    uint32_t magic;
+    uint32_t entry_point;
+    uint32_t code_size;
+    uint32_t data_size;
+};
+
+struct tbin_state {
+    int8_t reg[3];
+    int8_t memory[32];
+    uint32_t ip;
+    void *code;
+    uint32_t code_size;
+    int running;
+};
+
+int main() {
+    int fd = open("/dev/axion_opt", O_RDWR);
+    if (fd < 0) {
+        perror("open");
+        return 1;
+    }
+
+    // Load TBIN
+    uint8_t code[] = {0x01, 0x01, 0x01, 0x03, 0xFF, 0x01, 0x0C, 0x00, 0x00};  // TADD 1+1, TMUL -1*1, THLT
+    struct tbin_header hdr = {0x5442494E, (uint32_t)code, sizeof(code), 0};
+    if (ioctl(fd, AXION_TBIN_LOAD, &hdr) < 0) {
+        perror("load");
+        return 1;
+    }
+
+    // Step through execution
+    while (1) {
+        struct tbin_state state;
+        if (ioctl(fd, AXION_TBIN_STEP, NULL) < 0 || ioctl(fd, AXION_TBIN_GET_STATE, &state) < 0) {
+            perror("step/get_state");
+            break;
+        }
+        printf("IP: %u, Reg[0]: %d, Running: %d\n", state.ip, state.reg[0], state.running);
+        if (!state.running) break;
+        usleep(100000);  // Slow down for visibility
+    }
+
+    // Get suggestion
+    char suggestion[256];
+    if (ioctl(fd, AXION_GET_SUGGESTION, suggestion) < 0) {
+        perror("suggestion");
+    } else {
+        printf("Suggestion: %s\n", suggestion);
+    }
+
+    // Force CPU-heavy action
+    int action = 1;
+    if (ioctl(fd, AXION_SET_ACTION, &action) < 0) {
+        perror("set_action");
+    }
+
+    close(fd);
+    return 0;
+}
