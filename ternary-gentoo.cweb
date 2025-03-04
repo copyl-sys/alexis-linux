@@ -1,0 +1,683 @@
+@* Ternary-Gentoo: Bootstrapping a Ternary Computing Environment.
+This document defines Ternary-Gentoo, a single-file bootstrap utility for a
+ternary-aware Linux environment. Originally inspired by the Gentoo Bash
+installer script (Copyright 2006-2024 Gentoo Authors, GPL v2), this adaptation
+by [Your Name], 2025, under GPL v2, extends the concept into a C program. It
+installs the TritSys ternary arithmetic library and a modified Bash with a
+`ternary` builtin, enabling ternary logic operations (e.g., `1T+10`).
+
+The program serves three roles:
+1. A standalone ternary arithmetic utility (TritSys).
+2. A library (`libtritsys.a`) for linking with other tools.
+3. A bootstrapper that builds and installs itself and Bash into a prefix.
+
+@s T81BigInt int
+@s TernaryError int
+@s WORD_LIST int
+
+@** Header Definitions.
+We define the core structures and constants for ternary arithmetic.
+
+@c
+/* Copyright 2006-2024 Gentoo Authors; Distributed under the GPL v2 */
+/* Adapted for Ternary-Gentoo by [Your Name], 2025, under GPL v2 */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <limits.h>
+#include <math.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+#define TS_MALLOC(sz) malloc(sz)
+#define TS_FREE(ptr) free(ptr)
+#define TS_PRINT(fmt, ...) do { time_t t = time(NULL); fprintf(stderr, "[INFO %s] " fmt, ctime(&t), ##__VA_ARGS__); } while (0)
+
+#define TERNARY_NEGATIVE -1
+#define TERNARY_ZERO      0
+#define TERNARY_POSITIVE  1
+#define PI 3.14159265358979323846
+
+enum LogLevel { LOG_DEBUG = 0, LOG_INFO, LOG_WARN, LOG_ERROR };
+static const char *log_names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+int log_level = LOG_INFO;
+
+#define TADD 0x01
+#define TSUB 0x02
+#define TMUL 0x03
+#define TMOD 0x04
+#define TAND 0x05
+#define TOR  0x06
+#define TEXP 0x0B
+
+typedef enum {
+    TERNARY_NO_ERROR = 0,
+    TERNARY_ERR_MEMALLOC,
+    TERNARY_ERR_INVALID_INPUT,
+    TERNARY_ERR_DIVZERO
+} TernaryError;
+
+typedef struct {
+    int sign;
+    unsigned char *digits;
+    size_t len;
+    int is_mapped;
+    int fd;
+} T81BigInt;
+
+@** Ternary Arithmetic Functions.
+These implement the TritSys ternary arithmetic operations.
+
+@<Allocate T81BigInt@>
+@<Free T81BigInt@>
+@<Copy T81BigInt@>
+@<Add T81BigInt@>
+@<Subtract T81BigInt@>
+@<Multiply T81BigInt@>
+@<FFT Helper@>
+@<Divide T81BigInt@>
+@<Modulo T81BigInt@>
+@<Exponentiate T81BigInt@>
+@<Ternary AND T81BigInt@>
+@<Ternary OR T81BigInt@>
+@<Convert Integer to T81BigInt@>
+@<Convert T81BigInt to Integer@>
+@<Convert T81BigInt to String@>
+@<Evaluate Ternary Expression@>
+
+@** Bash Builtin: Ternary Logic.
+The `ternary` builtin allows Bash to evaluate ternary expressions.
+
+@c
+#ifdef BASH_BUILTIN
+#include <bash/builtins.h>
+#include <bash/shell.h>
+#include <bash/builtins/common.h>
+
+static int ternary_builtin(WORD_LIST *list) {
+    if (!list) {
+        builtin_error("usage: ternary <expression>");
+        return EX_USAGE;
+    }
+
+    char *expr = list->word->word;
+    T81BigInt *result = tritjs_eval_expression(expr);
+    if (!result) {
+        builtin_error("invalid ternary expression: %s", expr);
+        return EXECUTION_FAILURE;
+    }
+
+    char buffer[256];
+    t81bigint_to_string(result, buffer);
+    printf("%s\n", buffer);
+    free_t81bigint(result);
+    TS_FREE(result);
+
+    return EXECUTION_SUCCESS;
+}
+
+static char *ternary_doc[] = {
+    "Evaluate a ternary arithmetic expression.",
+    "",
+    "Usage: ternary EXPRESSION",
+    "Evaluates EXPRESSION (e.g., '1T+10') in ternary logic.",
+    "Operators: +, -, *, /, %, &, |",
+    NULL
+};
+
+struct builtin ternary_struct = {
+    "ternary",
+    ternary_builtin,
+    BUILTIN_ENABLED,
+    ternary_doc,
+    "ternary <expression>",
+    0
+};
+#endif
+
+@** Bootstrapping Logic.
+The `main` function bootstraps the ternary environment.
+
+@c
+static void einfo(const char *msg) { fprintf(stderr, "* %s\n", msg); }
+static void eerror(const char *msg) { fprintf(stderr, "!!! %s\n", msg); exit(1); }
+
+static int command_exists(const char *cmd) {
+    char path[256];
+    snprintf(path, sizeof(path), "which %s >/dev/null 2>&1", cmd);
+    return system(path) == 0;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        eerror("usage: ternary-gentoo <prefix>");
+    }
+
+    const char *prefix = argv[1];
+    char build_dir[256], cmd[512];
+
+    /* Setup directories */
+    einfo("Setting up ternary-gentoo build environment");
+    snprintf(build_dir, sizeof(build_dir), "%s/ternary-build", prefix);
+    if (mkdir(prefix, 0755) && errno != EEXIST) eerror("Failed to create prefix directory");
+    if (mkdir(build_dir, 0755) && errno != EEXIST) eerror("Failed to create build directory");
+    if (chdir(build_dir)) eerror("Failed to enter build directory");
+
+    /* Generate tritsys.c from this file */
+    einfo("Generating tritsys source");
+    FILE *fp = fopen("tritsys.c", "w");
+    if (!fp) eerror("Failed to create tritsys.c; ensure write permissions");
+    fputs("#include \"ternary-gentoo.c\"\n", fp);
+    fclose(fp);
+
+    /* Build TritSys library and executable */
+    einfo("Building tritsys and libtritsys");
+    if (!command_exists("gcc")) eerror("gcc not found; required to compile tritsys");
+    snprintf(cmd, sizeof(cmd), "gcc -c tritsys.c -o tritsys.o");
+    if (system(cmd)) eerror("Failed to compile tritsys.o; ensure libreadline-dev and libm are installed");
+    snprintf(cmd, sizeof(cmd), "ar rcs libtritsys.a tritsys.o");
+    if (system(cmd)) eerror("Failed to create libtritsys.a");
+    snprintf(cmd, sizeof(cmd), "gcc tritsys.c -lreadline -lm -o tritsys");
+    if (system(cmd)) eerror("Failed to compile tritsys executable");
+
+    /* Install TritSys */
+    snprintf(cmd, sizeof(cmd), "%s/usr/bin", prefix);
+    if (mkdir(cmd, 0755) && errno != EEXIST) eerror("Failed to create bin directory");
+    snprintf(cmd, sizeof(cmd), "%s/usr/lib", prefix);
+    if (mkdir(cmd, 0755) && errno != EEXIST) eerror("Failed to create lib directory");
+    snprintf(cmd, sizeof(cmd), "cp tritsys %s/usr/bin/", prefix);
+    if (system(cmd)) eerror("Failed to install tritsys");
+    snprintf(cmd, sizeof(cmd), "cp libtritsys.a %s/usr/lib/", prefix);
+    if (system(cmd)) eerror("Failed to install libtritsys.a");
+
+    /* Fetch Bash */
+    const char *bash_url = "http://distfiles.prefix.bitzolder.nl/distfiles/bash-4.2.tar.gz";
+    einfo("Fetching bash-4.2.tar.gz");
+    if (!command_exists("wget")) eerror("wget not found; required to download bash");
+    snprintf(cmd, sizeof(cmd), "wget --no-check-certificate %s", bash_url);
+    if (system(cmd)) eerror("Failed to download bash-4.2.tar.gz");
+
+    einfo("Extracting bash-4.2.tar.gz");
+    if (system("gzip -d bash-4.2.tar.gz")) eerror("Failed to decompress bash archive");
+    if (system("tar -xf bash-4.2.tar")) eerror("Failed to extract bash archive");
+
+    if (chdir("bash-4.2")) eerror("Failed to enter bash directory");
+
+    /* Patch Bash with ternary builtin */
+    einfo("Patching Bash with ternary builtin");
+    fp = fopen("builtins/ternary_builtin.c", "w");
+    if (!fp) eerror("Failed to create ternary_builtin.c");
+    fputs("#define BASH_BUILTIN\n#include \"../ternary-gentoo.c\"\n", fp);
+    fclose(fp);
+    fp = fopen("builtins/Makefile.in.patch", "w");
+    if (!fp) eerror("Failed to create Makefile.in.patch");
+    fputs("--- builtins/Makefile.in\n+++ builtins/Makefile.in\n@@ -50,6 +50,6 @@\n-SOURCES = $(BUILTINS)\n+SOURCES = $(BUILTINS) ternary_builtin.c\n-OBJECTS = $(BUILTINS:.c=.o)\n+OBJECTS = $(BUILTINS:.c=.o) ternary_builtin.o\n", fp);
+    fclose(fp);
+    if (system("patch < builtins/Makefile.in.patch")) eerror("Failed to patch Makefile.in");
+    fp = fopen("builtins/defun.patch", "w");
+    if (!fp) eerror("Failed to create defun.patch");
+    fputs("--- builtins/defun\n+++ builtins/defun\n@@ -100,3 +100,4 @@\n DEFINE_BUILTIN(unset)\n+DEFINE_BUILTIN(ternary)\n", fp);
+    fclose(fp);
+    if (system("patch < builtins/defun.patch")) eerror("Failed to patch defun");
+
+    /* Build and install Bash */
+    einfo("Building ternary-aware Bash");
+    snprintf(cmd, sizeof(cmd), "./configure --prefix=%s/usr --disable-nls LDFLAGS=\"-L%s/usr/lib -ltritsys\" LIBS=\"-lm\"", prefix, prefix);
+    if (system(cmd)) eerror("Bash configuration failed; check dependencies");
+    if (system("make")) eerror("Bash compilation failed");
+    if (system("make install")) eerror("Bash installation failed");
+
+    /* Verify */
+    einfo("Verifying ternary-gentoo bootstrap");
+    snprintf(cmd, sizeof(cmd), "%s/usr/bin/tritsys", prefix);
+    if (access(cmd, X_OK)) eerror("tritsys not installed correctly");
+    snprintf(cmd, sizeof(cmd), "%s/usr/bin/bash -c 'ternary \"1T+10\"'", prefix);
+    if (system(cmd)) eerror("Bash or ternary builtin not working; expected output '11'");
+    einfo("Ternary-Gentoo bootstrap completed at:");
+    printf("* %s\n", prefix);
+    snprintf(cmd, sizeof(cmd), "Test with: %s/usr/bin/bash -c 'ternary \"1T+10\"'", prefix);
+    einfo(cmd);
+
+    return 0;
+}
+
+@** Ternary Arithmetic Implementations.
+Here are the detailed implementations of the ternary arithmetic functions.
+
+@<Allocate T81BigInt@>=
+TernaryError allocate_t81bigint(T81BigInt *x, size_t len) {
+    size_t bytes = len ? len : 1;
+    x->len = len;
+    x->is_mapped = 0;
+    x->fd = -1;
+    x->digits = TS_MALLOC(bytes);
+    if (!x->digits) return TERNARY_ERR_MEMALLOC;
+    memset(x->digits, 0, bytes);
+    return TERNARY_NO_ERROR;
+}
+
+@<Free T81BigInt@>=
+void free_t81bigint(T81BigInt *x) {
+    if (!x || !x->digits) return;
+    TS_FREE(x->digits);
+    x->digits = NULL;
+}
+
+@<Copy T81BigInt@>=
+TernaryError t81bigint_copy(const T81BigInt *src, T81BigInt *dest) {
+    if (allocate_t81bigint(dest, src->len) != TERNARY_NO_ERROR) return TERNARY_ERR_MEMALLOC;
+    memcpy(dest->digits, src->digits, src->len);
+    dest->sign = src->sign;
+    return TERNARY_NO_ERROR;
+}
+
+@<Add T81BigInt@>=
+TernaryError t81bigint_add(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    size_t max_len = (a->len > b->len) ? a->len : b->len;
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res) return TERNARY_ERR_MEMALLOC;
+    if (allocate_t81bigint(res, max_len + 1) != TERNARY_NO_ERROR) {
+        TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    int carry = 0;
+    for (size_t i = 0; i < max_len || carry; i++) {
+        if (i >= res->len) break;
+        int digit_a = (i < a->len) ? (signed char)a->digits[i] * a->sign : 0;
+        int digit_b = (i < b->len) ? (signed char)b->digits[i] * b->sign : 0;
+        int sum = digit_a + digit_b + carry;
+        carry = 0;
+        while (sum > 1) { sum -= 3; carry++; }
+        while (sum < -1) { sum += 3; carry--; }
+        res->digits[i] = (unsigned char)sum;
+    }
+    res->sign = (carry < 0) ? TERNARY_NEGATIVE : (carry > 0) ? TERNARY_POSITIVE : TERNARY_ZERO;
+    if (res->sign == TERNARY_ZERO && max_len == 0) res->sign = TERNARY_ZERO;
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+@<Subtract T81BigInt@>=
+TernaryError t81bigint_sub(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (!a || !b || !result) return TERNARY_ERR_INVALID_INPUT;
+    T81BigInt *neg_b = TS_MALLOC(sizeof(T81BigInt));
+    if (!neg_b || t81bigint_copy(b, neg_b) != TERNARY_NO_ERROR) {
+        TS_FREE(neg_b);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    neg_b->sign = (b->sign == TERNARY_POSITIVE) ? TERNARY_NEGATIVE : 
+                  (b->sign == TERNARY_NEGATIVE) ? TERNARY_POSITIVE : TERNARY_ZERO;
+    TernaryError err = t81bigint_add(a, neg_b, result);
+    free_t81bigint(neg_b);
+    TS_FREE(neg_b);
+    return err;
+}
+
+@<FFT Helper@>=
+static void fft(double *a, size_t n, int inverse) {
+    if (n <= 1) return;
+    double *even = TS_MALLOC(n / 2 * sizeof(double));
+    double *odd = TS_MALLOC(n / 2 * sizeof(double));
+    if (!even || !odd) { TS_FREE(even); TS_FREE(odd); return; }
+    for (size_t i = 0; i < n / 2; i++) {
+        even[i] = a[2 * i];
+        odd[i] = a[2 * i + 1];
+    }
+    fft(even, n / 2, inverse);
+    fft(odd, n / 2, inverse);
+    for (size_t k = 0; k < n / 2; k++) {
+        double theta = (inverse ? -2.0 : 2.0) * PI * k / n;
+        double w_re = cos(theta), w_im = sin(theta);
+        double t_re = odd[k] * w_re - odd[k] * w_im;
+        a[k] = even[k] + t_re;
+        a[k + n / 2] = even[k] - t_re;
+        if (inverse) { a[k] /= 2; a[k + n / 2] /= 2; }
+    }
+    TS_FREE(even); TS_FREE(odd);
+}
+
+@<Multiply T81BigInt@>=
+TernaryError t81bigint_mul(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (a->sign == TERNARY_ZERO || b->sign == TERNARY_ZERO) {
+        *result = TS_MALLOC(sizeof(T81BigInt));
+        if (allocate_t81bigint(*result, 1) != TERNARY_NO_ERROR) return TERNARY_ERR_MEMALLOC;
+        (*result)->sign = TERNARY_ZERO;
+        (*result)->digits[0] = 0;
+        return TERNARY_NO_ERROR;
+    }
+    size_t len = a->len + b->len, n = 1;
+    while (n < len) n <<= 1;
+    double *a_fft = TS_MALLOC(n * sizeof(double)), *b_fft = TS_MALLOC(n * sizeof(double));
+    if (!a_fft || !b_fft) { TS_FREE(a_fft); TS_FREE(b_fft); return TERNARY_ERR_MEMALLOC; }
+    memset(a_fft, 0, n * sizeof(double)); memset(b_fft, 0, n * sizeof(double));
+    for (size_t i = 0; i < a->len; i++) a_fft[i] = (signed char)a->digits[i] * a->sign;
+    for (size_t i = 0; i < b->len; i++) b_fft[i] = (signed char)b->digits[i] * b->sign;
+    fft(a_fft, n, 0); fft(b_fft, n, 0);
+    double *c_fft = TS_MALLOC(n * sizeof(double));
+    if (!c_fft) { TS_FREE(a_fft); TS_FREE(b_fft); TS_FREE(c_fft); return TERNARY_ERR_MEMALLOC; }
+    for (size_t i = 0; i < n; i++) c_fft[i] = a_fft[i] * b_fft[i];
+    fft(c_fft, n, 1);
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res || allocate_t81bigint(res, len) != TERNARY_NO_ERROR) {
+        TS_FREE(a_fft); TS_FREE(b_fft); TS_FREE(c_fft); TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    res->sign = (a->sign == b->sign) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
+    int carry = 0;
+    for (size_t i = 0; i < len; i++) {
+        double val = c_fft[i] + carry;
+        int digit = (int)round(val);
+        carry = 0;
+        while (digit > 1) { digit -= 3; carry++; }
+        while (digit < -1) { digit += 3; carry--; }
+        res->digits[i] = (unsigned char)digit;
+    }
+    if (carry) TS_PRINT("Warning: Carry overflow in FFT multiplication\n");
+    TS_FREE(a_fft); TS_FREE(b_fft); TS_FREE(c_fft);
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+@<Divide T81BigInt@>=
+TernaryError t81bigint_div(const T81BigInt *a, const T81BigInt *b, T81BigInt **quotient) {
+    if (b->sign == TERNARY_ZERO) return TERNARY_ERR_DIVZERO;
+    if (a->sign == TERNARY_ZERO) {
+        *quotient = TS_MALLOC(sizeof(T81BigInt));
+        if (allocate_t81bigint(*quotient, 1) != TERNARY_NO_ERROR) return TERNARY_ERR_MEMALLOC;
+        (*quotient)->sign = TERNARY_ZERO;
+        (*quotient)->digits[0] = 0;
+        return TERNARY_NO_ERROR;
+    }
+    T81BigInt *abs_a = TS_MALLOC(sizeof(T81BigInt)), *abs_b = TS_MALLOC(sizeof(T81BigInt));
+    if (!abs_a || !abs_b || t81bigint_copy(a, abs_a) != TERNARY_NO_ERROR || t81bigint_copy(b, abs_b) != TERNARY_NO_ERROR) {
+        free_t81bigint(abs_a); TS_FREE(abs_a); free_t81bigint(abs_b); TS_FREE(abs_b);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    abs_a->sign = TERNARY_POSITIVE; abs_b->sign = TERNARY_POSITIVE;
+    T81BigInt *x = TS_MALLOC(sizeof(T81BigInt));
+    if (!x || allocate_t81bigint(x, abs_b->len + 1) != TERNARY_NO_ERROR) {
+        free_t81bigint(abs_a); TS_FREE(abs_a); free_t81bigint(abs_b); TS_FREE(abs_b);
+        free_t81bigint(x); TS_FREE(x);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    x->sign = TERNARY_POSITIVE; x->digits[0] = 1;
+    T81BigInt *two = t81bigint_from_int(2);
+    for (int i = 0; i < 5; i++) {
+        T81BigInt *bx = NULL;
+        if (t81bigint_mul(abs_b, x, &bx) != TERNARY_NO_ERROR) goto div_cleanup;
+        T81BigInt *two_minus_bx = NULL;
+        if (t81bigint_add(two, bx, &two_minus_bx) != TERNARY_NO_ERROR) {
+            free_t81bigint(bx); TS_FREE(bx); goto div_cleanup;
+        }
+        two_minus_bx->sign = (two_minus_bx->sign == TERNARY_POSITIVE) ? TERNARY_NEGATIVE : TERNARY_POSITIVE;
+        T81BigInt *temp_x = x;
+        if (t81bigint_mul(x, two_minus_bx, &x) != TERNARY_NO_ERROR) {
+            free_t81bigint(temp_x); TS_FREE(temp_x); free_t81bigint(bx); TS_FREE(bx);
+            free_t81bigint(two_minus_bx); TS_FREE(two_minus_bx); goto div_cleanup;
+        }
+        free_t81bigint(temp_x); TS_FREE(temp_x);
+        free_t81bigint(bx); TS_FREE(bx);
+        free_t81bigint(two_minus_bx); TS_FREE(two_minus_bx);
+    }
+    T81BigInt *q = NULL;
+    if (t81bigint_mul(abs_a, x, &q) != TERNARY_NO_ERROR) goto div_cleanup;
+    q->sign = (a->sign == b->sign) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
+    free_t81bigint(abs_a); TS_FREE(abs_a);
+    free_t81bigint(abs_b); TS_FREE(abs_b);
+    free_t81bigint(x); TS_FREE(x);
+    free_t81bigint(two); TS_FREE(two);
+    *quotient = q;
+    return TERNARY_NO_ERROR;
+div_cleanup:
+    free_t81bigint(abs_a); TS_FREE(abs_a);
+    free_t81bigint(abs_b); TS_FREE(abs_b);
+    free_t81bigint(x); TS_FREE(x);
+    free_t81bigint(two); TS_FREE(two);
+    return TERNARY_ERR_MEMALLOC;
+}
+
+@<Modulo T81BigInt@>=
+TernaryError t81bigint_mod(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (!a || !b || !result || b->sign == TERNARY_ZERO) return TERNARY_ERR_DIVZERO;
+    T81BigInt *quotient = NULL;
+    TernaryError err = t81bigint_div(a, b, "ient);
+    if (err != TERNARY_NO_ERROR) return err;
+    T81BigInt *prod = NULL;
+    err = t81bigint_mul(quotient, b, &prod);
+    if (err != TERNARY_NO_ERROR) {
+        free_t81bigint(quotient); TS_FREE(quotient);
+        return err;
+    }
+    err = t81bigint_sub(a, prod, result);
+    free_t81bigint(quotient); TS_FREE(quotient);
+    free_t81bigint(prod); TS_FREE(prod);
+    return err;
+}
+
+@<Exponentiate T81BigInt@>=
+TernaryError t81bigint_exp(const T81BigInt *base, unsigned int exponent, T81BigInt **result) {
+    if (!base || !result) return TERNARY_ERR_INVALID_INPUT;
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res) return TERNARY_ERR_MEMALLOC;
+    if (exponent == 0) {
+        if (allocate_t81bigint(res, 1) != TERNARY_NO_ERROR) {
+            TS_FREE(res);
+            return TERNARY_ERR_MEMALLOC;
+        }
+        res->sign = TERNARY_POSITIVE;
+        res->digits[0] = 1;
+        *result = res;
+        return TERNARY_NO_ERROR;
+    }
+    if (base->sign == TERNARY_ZERO) {
+        if (allocate_t81bigint(res, 1) != TERNARY_NO_ERROR) {
+            TS_FREE(res);
+            return TERNARY_ERR_MEMALLOC;
+        }
+        res->sign = TERNARY_ZERO;
+        res->digits[0] = 0;
+        *result = res;
+        return TERNARY_NO_ERROR;
+    }
+    if (allocate_t81bigint(res, 1) != TERNARY_NO_ERROR) {
+        TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    res->sign = TERNARY_POSITIVE;
+    res->digits[0] = 1;
+    T81BigInt *temp_base = NULL;
+    if (t81bigint_copy(base, &temp_base) != TERNARY_NO_ERROR) {
+        free_t81bigint(res); TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    for (unsigned int i = 0; i < exponent; i++) {
+        T81BigInt *new_res = NULL;
+        TernaryError err = t81bigint_mul(res, temp_base, &new_res);
+        if (err != TERNARY_NO_ERROR) {
+            free_t81bigint(res); TS_FREE(res);
+            free_t81bigint(temp_base); TS_FREE(temp_base);
+            return err;
+        }
+        free_t81bigint(res);
+        res = new_res;
+    }
+    free_t81bigint(temp_base); TS_FREE(temp_base);
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+@<Ternary AND T81BigInt@>=
+TernaryError t81bigint_tand(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (!a || !b || !result) return TERNARY_ERR_INVALID_INPUT;
+    size_t max_len = (a->len > b->len) ? a->len : b->len;
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res || allocate_t81bigint(res, max_len) != TERNARY_NO_ERROR) {
+        TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    for (size_t i = 0; i < max_len; i++) {
+        int trit_a = (i < a->len) ? (signed char)a->digits[i] * a->sign : 0;
+        int trit_b = (i < b->len) ? (signed char)b->digits[i] * b->sign : 0;
+        res->digits[i] = (trit_a < trit_b) ? trit_a : trit_b;
+    }
+    res->sign = TERNARY_POSITIVE;
+    int all_zero = 1;
+    for (size_t i = 0; i < max_len; i++) {
+        if (res->digits[i] != 0) { all_zero = 0; break; }
+    }
+    if (all_zero) res->sign = TERNARY_ZERO;
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+@<Ternary OR T81BigInt@>=
+TernaryError t81bigint_tor(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (!a || !b || !result) return TERNARY_ERR_INVALID_INPUT;
+    size_t max_len = (a->len > b->len) ? a->len : b->len;
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res || allocate_t81bigint(res, max_len) != TERNARY_NO_ERROR) {
+        TS_FREE(res);
+        return TERNARY_ERR_MEMALLOC;
+    }
+    for (size_t i = 0; i < max_len; i++) {
+        int trit_a = (i < a->len) ? (signed char)a->digits[i] * a->sign : 0;
+        int trit_b = (i < b->len) ? (signed char)b->digits[i] * b->sign : 0;
+        res->digits[i] = (trit_a > trit_b) ? trit_a : trit_b;
+    }
+    res->sign = TERNARY_POSITIVE;
+    int all_zero = 1;
+    for (size_t i = 0; i < max_len; i++) {
+        if (res->digits[i] != 0) { all_zero = 0; break; }
+    }
+    if (all_zero) res->sign = TERNARY_ZERO;
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+@<Convert Integer to T81BigInt@>=
+T81BigInt *t81bigint_from_int(int num) {
+    T81BigInt *result = TS_MALLOC(sizeof(T81BigInt));
+    if (!result) return NULL;
+    if (num == 0) {
+        if (allocate_t81bigint(result, 1) != TERNARY_NO_ERROR) {
+            TS_FREE(result);
+            return NULL;
+        }
+        result->sign = TERNARY_ZERO;
+        result->digits[0] = 0;
+        return result;
+    }
+    int abs_num = abs(num);
+    size_t len = 0;
+    int temp = abs_num;
+    while (temp > 0) { len++; temp /= 3; }
+    if (allocate_t81bigint(result, len) != TERNARY_NO_ERROR) {
+        TS_FREE(result);
+        return NULL;
+    }
+    result->sign = num < 0 ? TERNARY_NEGATIVE : TERNARY_POSITIVE;
+    for (size_t i = 0; abs_num > 0 && i < len; i++) {
+        int rem = abs_num % 3;
+        result->digits[i] = (rem == 2) ? -1 : rem;
+        abs_num = (rem == 2) ? (abs_num / 3) + 1 : abs_num / 3;
+    }
+    return result;
+}
+
+@<Convert T81BigInt to Integer@>=
+int t81bigint_to_int(const T81BigInt *num, TernaryError *err) {
+    if (!num) {
+        if (err) *err = TERNARY_ERR_INVALID_INPUT;
+        return 0;
+    }
+    if (num->sign == TERNARY_ZERO) return 0;
+    int result = 0;
+    for (size_t i = num->len; i > 0; i--) {
+        int digit = (signed char)num->digits[i - 1];
+        if (result > (INT_MAX - abs(digit)) / 3) {
+            if (err) *err = TERNARY_ERR_INVALID_INPUT;
+            return 0;
+        }
+        result = result * 3 + digit;
+    }
+    result *= num->sign;
+    if (err) *err = TERNARY_NO_ERROR;
+    return result;
+}
+
+@<Convert T81BigInt to String@>=
+void t81bigint_to_string(const T81BigInt *num, char *buffer) {
+    if (!num || num->sign == TERNARY_ZERO) {
+        strcpy(buffer, "0");
+        return;
+    }
+    size_t i = 0;
+    if (num->sign == TERNARY_NEGATIVE) buffer[i++] = '-';
+    size_t start = num->len;
+    while (start > 0 && num->digits[start - 1] == 0) start--;
+    if (start == 0) {
+        strcpy(buffer, "0");
+        return;
+    }
+    for (size_t j = start; j > 0; j--) {
+        int digit = (signed char)num->digits[j - 1];
+        buffer[i++] = (digit == 1) ? '1' : (digit == -1) ? 'T' : '0';
+    }
+    buffer[i] = '\0';
+}
+
+@<Evaluate Ternary Expression@>=
+T81BigInt *tritjs_eval_expression(const char *expr) {
+    if (!expr) return NULL;
+    char *plus = strchr(expr, '+');
+    char *minus = strchr(expr, '-');
+    char *mul = strchr(expr, '*');
+    char *div = strchr(expr, '/');
+    char *mod = strchr(expr, '%');
+    char *tand = strchr(expr, '&');
+    char *tor = strchr(expr, '|');
+    char *op = NULL;
+    TernaryError (*op_func)(const T81BigInt *, const T81BigInt *, T81BigInt **) = NULL;
+    if (tand) { op = tand; op_func = t81bigint_tand; }
+    if (tor && (!op || tor > op)) { op = tor; op_func = t81bigint_tor; }
+    if (plus && (!op || plus > op)) { op = plus; op_func = t81bigint_add; }
+    if (minus && (!op || minus > op)) { op = minus; op_func = t81bigint_sub; }
+    if (mul && (!op || mul > op)) { op = mul; op_func = t81bigint_mul; }
+    if (div && (!op || div > op)) { op = div; op_func = t81bigint_div; }
+    if (mod && (!op || mod > op)) { op = mod; op_func = t81bigint_mod; }
+    if (!op) {
+        T81BigInt *num = TS_MALLOC(sizeof(T81BigInt));
+        if (allocate_t81bigint(num, strlen(expr)) != TERNARY_NO_ERROR) {
+            TS_FREE(num);
+            return NULL;
+        }
+        num->sign = (expr[0] == '-') ? TERNARY_NEGATIVE : TERNARY_POSITIVE;
+        size_t i = (expr[0] == '-') ? 1 : 0, j = 0;
+        while (expr[i]) {
+            num->digits[j++] = (expr[i] == 'T') ? -1 : (expr[i] - '0');
+            i++;
+        }
+        num->len = j;
+        return num;
+    }
+    char left[64], right[64];
+    strncpy(left, expr, op - expr);
+    left[op - expr] = '\0';
+    strcpy(right, op + 1);
+    T81BigInt *a = tritjs_eval_expression(left);
+    T81BigInt *b = tritjs_eval_expression(right);
+    T81BigInt *result = NULL;
+    if (a && b && op_func(a, b, &result) == TERNARY_NO_ERROR) {
+        free_t81bigint(a); TS_FREE(a);
+        free_t81bigint(b); TS_FREE(b);
+        return result;
+    }
+    free_t81bigint(a); TS_FREE(a);
+    free_t81bigint(b); TS_FREE(b);
+    free_t81bigint(result); TS_FREE(result);
+    return NULL;
+}
