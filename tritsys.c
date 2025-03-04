@@ -67,7 +67,7 @@ typedef enum {
 
 typedef struct {
     int sign;
-    unsigned char *digits;
+    unsigned char *digits; /* Represents balanced ternary digits; values ideally in {-1,0,1} */
     size_t len;
     int is_mapped;
     int fd;
@@ -263,3 +263,215 @@ module_exit(axion_exit);
 MODULE_LICENSE("GPL");
 
 #endif /* __KERNEL__ */
+
+/* ============================================================
+ * Section 3: Extended Matrix and Arithmetic Operations
+ * These routines extend the functionality of TritSys to support matrix
+ * operations and additional T81BigInt arithmetic.
+ */
+
+#include <stdlib.h>
+#include <string.h>
+
+/* Forward declarations for new arithmetic functions */
+TernaryError t81bigint_copy(const T81BigInt *src, T81BigInt *dest);
+TernaryError t81bigint_mul(const T81BigInt *a, const T81BigInt *b, T81BigInt **result);
+
+/*
+ * Create a new matrix with the given dimensions.
+ * Allocates a T81Matrix and initializes each element to represent zero.
+ */
+T81Matrix *create_matrix(int rows, int cols) {
+    T81Matrix *m = (T81Matrix *) TS_MALLOC(sizeof(T81Matrix));
+    if (!m) return NULL;
+    m->rows = rows;
+    m->cols = cols;
+    m->data = (T81BigInt *) TS_MALLOC(rows * cols * sizeof(T81BigInt));
+    if (!m->data) {
+        TS_FREE(m);
+        return NULL;
+    }
+    for (int i = 0; i < rows * cols; i++) {
+        if (allocate_t81bigint(&m->data[i], 1) != TERNARY_NO_ERROR) {
+            for (int j = 0; j < i; j++) {
+                free_t81bigint(&m->data[j]);
+            }
+            TS_FREE(m->data);
+            TS_FREE(m);
+            return NULL;
+        }
+        m->data[i].sign = TERNARY_ZERO;
+    }
+    return m;
+}
+
+/*
+ * Free the memory associated with a matrix.
+ */
+void free_matrix(T81Matrix *m) {
+    if (!m) return;
+    if (m->data) {
+        for (int i = 0; i < m->rows * m->cols; i++) {
+            free_t81bigint(&m->data[i]);
+        }
+        TS_FREE(m->data);
+    }
+    TS_FREE(m);
+}
+
+/*
+ * Matrix addition: result = a + b.
+ * Both matrices must have the same dimensions.
+ */
+TernaryError tmat_add(T81Matrix *a, T81Matrix *b, T81Matrix **result) {
+    if (a->rows != b->rows || a->cols != b->cols)
+        return TERNARY_ERR_INVALID_INPUT;
+    T81Matrix *res = create_matrix(a->rows, a->cols);
+    if (!res)
+        return TERNARY_ERR_MEMALLOC;
+    for (int i = 0; i < a->rows * a->cols; i++) {
+        TernaryError err = t81bigint_add(&a->data[i], &b->data[i], &res->data[i]);
+        if (err != TERNARY_NO_ERROR) {
+            free_matrix(res);
+            return err;
+        }
+    }
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+/*
+ * Matrix multiplication: result = a * b.
+ * The number of columns in a must equal the number of rows in b.
+ */
+TernaryError tmat_mul(T81Matrix *a, T81Matrix *b, T81Matrix **result) {
+    if (a->cols != b->rows)
+        return TERNARY_ERR_INVALID_INPUT;
+    int rows = a->rows;
+    int cols = b->cols;
+    int inner = a->cols;
+    T81Matrix *res = create_matrix(rows, cols);
+    if (!res)
+        return TERNARY_ERR_MEMALLOC;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            int res_index = i * cols + j;
+            free_t81bigint(&res->data[res_index]);
+            if (allocate_t81bigint(&res->data[res_index], 1) != TERNARY_NO_ERROR) {
+                free_matrix(res);
+                return TERNARY_ERR_MEMALLOC;
+            }
+            res->data[res_index].sign = TERNARY_ZERO;
+            for (int k = 0; k < inner; k++) {
+                int indexA = i * a->cols + k;
+                int indexB = k * b->cols + j;
+                T81BigInt *tempProduct = NULL;
+                TernaryError err = t81bigint_mul(&a->data[indexA], &b->data[indexB], &tempProduct);
+                if (err != TERNARY_NO_ERROR) {
+                    free_matrix(res);
+                    return err;
+                }
+                T81BigInt *newSum = NULL;
+                err = t81bigint_add(&res->data[res_index], tempProduct, &newSum);
+                free_t81bigint(tempProduct);
+                TS_FREE(tempProduct);
+                if (err != TERNARY_NO_ERROR) {
+                    free_matrix(res);
+                    return err;
+                }
+                free_t81bigint(&res->data[res_index]);
+                res->data[res_index] = *newSum;
+                TS_FREE(newSum);
+            }
+        }
+    }
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
+
+/*
+ * Matrix transposition: returns a new matrix that is the transpose of m.
+ */
+T81Matrix *tmat_transpose(T81Matrix *m) {
+    T81Matrix *t = create_matrix(m->cols, m->rows);
+    if (!t)
+        return NULL;
+    for (int i = 0; i < m->rows; i++) {
+        for (int j = 0; j < m->cols; j++) {
+            int src_index = i * m->cols + j;
+            int dest_index = j * m->rows + i;
+            TernaryError err = t81bigint_copy(&m->data[src_index], &t->data[dest_index]);
+            if (err != TERNARY_NO_ERROR) {
+                free_matrix(t);
+                return NULL;
+            }
+        }
+    }
+    return t;
+}
+
+/*
+ * Deep copy a T81BigInt from src to dest.
+ */
+TernaryError t81bigint_copy(const T81BigInt *src, T81BigInt *dest) {
+    if (allocate_t81bigint(dest, src->len) != TERNARY_NO_ERROR)
+        return TERNARY_ERR_MEMALLOC;
+    memcpy(dest->digits, src->digits, src->len);
+    dest->sign = src->sign;
+    return TERNARY_NO_ERROR;
+}
+
+/*
+ * Multiply two T81BigInts: result = a * b.
+ * This uses a naive multiplication algorithm with balanced ternary normalization.
+ */
+TernaryError t81bigint_mul(const T81BigInt *a, const T81BigInt *b, T81BigInt **result) {
+    if (a->sign == TERNARY_ZERO || b->sign == TERNARY_ZERO) {
+        *result = TS_MALLOC(sizeof(T81BigInt));
+        if (allocate_t81bigint(*result, 1) != TERNARY_NO_ERROR)
+            return TERNARY_ERR_MEMALLOC;
+        (*result)->sign = TERNARY_ZERO;
+        (*result)->digits[0] = 0;
+        return TERNARY_NO_ERROR;
+    }
+    int res_len = a->len + b->len;
+    int *temp = (int *) TS_MALLOC(res_len * sizeof(int));
+    if (!temp) return TERNARY_ERR_MEMALLOC;
+    for (int i = 0; i < res_len; i++)
+        temp[i] = 0;
+    for (int i = 0; i < a->len; i++) {
+        int digit_a = (int)((signed char)a->digits[i]);
+        for (int j = 0; j < b->len; j++) {
+            int digit_b = (int)((signed char)b->digits[j]);
+            temp[i + j] += digit_a * digit_b;
+        }
+    }
+    for (int i = 0; i < res_len; i++) {
+        while (temp[i] > 1) {
+            temp[i] -= 3;
+            if (i + 1 < res_len)
+                temp[i + 1]++;
+        }
+        while (temp[i] < -1) {
+            temp[i] += 3;
+            if (i + 1 < res_len)
+                temp[i + 1]--;
+        }
+    }
+    T81BigInt *res = TS_MALLOC(sizeof(T81BigInt));
+    if (!res) { TS_FREE(temp); return TERNARY_ERR_MEMALLOC; }
+    if (allocate_t81bigint(res, res_len) != TERNARY_NO_ERROR) {
+         TS_FREE(temp);
+         TS_FREE(res);
+         return TERNARY_ERR_MEMALLOC;
+    }
+    for (int i = 0; i < res_len; i++) {
+        /* Store the balanced ternary digit. Note: if negative values are expected,
+           ensure the T81BigInt representation supports signed digits. */
+        res->digits[i] = (unsigned char)temp[i];
+    }
+    res->sign = (a->sign == b->sign) ? TERNARY_POSITIVE : TERNARY_NEGATIVE;
+    TS_FREE(temp);
+    *result = res;
+    return TERNARY_NO_ERROR;
+}
