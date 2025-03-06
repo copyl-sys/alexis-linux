@@ -1,4 +1,4 @@
-// gcc t81benchmark.c -o t81benchmark -lt81 -lgmp -O2
+// gcc t81benchmark.c -o t81benchmark -lt81 -lgmp -lmpfr -O2
 // ./t81benchmark
 //
 // Enabled by OpenAI
@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <gmp.h>
+#include <mpfr.h>
 #include "t81.h"
 
 #define ITERATIONS 100000
@@ -91,9 +92,50 @@ void benchmark_multiplication() {
     mpz_clears(gmp_a, gmp_b, gmp_product, NULL);
 }
 
+// Benchmark function for floating-point operations
+void benchmark_floating_point() {
+    T81FloatHandle t81_a = t81float_new("1234567890.123456789", 0);
+    T81FloatHandle t81_b = t81float_new("9876543210.987654321", 0);
+    T81FloatHandle t81_result;
+    
+    mpfr_t mpfr_a, mpfr_b, mpfr_result;
+    mpfr_init_set_str(mpfr_a, "1234567890.123456789", 10, MPFR_RNDN);
+    mpfr_init_set_str(mpfr_b, "9876543210.987654321", 10, MPFR_RNDN);
+    mpfr_init(mpfr_result);
+    
+    clock_t start, end;
+    double t81_time, mpfr_time;
+    
+    // Benchmark T81
+    start = clock();
+    for (int i = 0; i < ITERATIONS; i++) {
+        t81float_add(t81_a, t81_b, &t81_result);
+        t81float_free(t81_result);
+    }
+    end = clock();
+    t81_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    // Benchmark MPFR
+    start = clock();
+    for (int i = 0; i < ITERATIONS; i++) {
+        mpfr_add(mpfr_result, mpfr_a, mpfr_b, MPFR_RNDN);
+    }
+    end = clock();
+    mpfr_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("T81 Float Addition Time: %f seconds\n", t81_time);
+    printf("MPFR Float Addition Time: %f seconds\n", mpfr_time);
+    
+    // Cleanup
+    t81float_free(t81_a);
+    t81float_free(t81_b);
+    mpfr_clears(mpfr_a, mpfr_b, mpfr_result, NULL);
+}
+
 int main() {
     printf("Running benchmarks...\n");
     benchmark_addition();
     benchmark_multiplication();
+    benchmark_floating_point();
     return 0;
 }
