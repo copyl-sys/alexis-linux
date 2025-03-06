@@ -1,7 +1,7 @@
 // gcc t81benchmark.c -o t81benchmark -lt81 -lgmp -O2
 // ./t81benchmark
 //
-// Script Enabled by OpenAI
+// Enabled by OpenAI
 
 #include <stdio.h>
 #include <stdlib.h>
