@@ -1,4 +1,4 @@
-// gcc benchmark.c -o benchmark -lt81 -lgmp -O2
+// gcc t81benchmark.c -o t81benchmark -lt81 -lgmp -O2
 // ./t81benchmark
 //
 // Script Enabled by OpenAI
